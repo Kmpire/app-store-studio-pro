@@ -854,6 +854,11 @@ export default function App() {
 
     let exportHost = null;
     try {
+      // Ensure all web fonts are fully loaded before capturing
+      if (document.fonts) {
+        await document.fonts.ready;
+      }
+
       const cloneNode = canvasRef.current.cloneNode(true);
       
       // Remove any UI overlays (focus badges, edit outlines) from exported graphic
@@ -865,25 +870,33 @@ export default function App() {
         if (normalShadow) el.style.boxShadow = normalShadow;
       });
       
+      // Reset scale/transform on cloned canvas to render at native 1:1 pixel dimensions
+      cloneNode.style.transform = 'none';
+      cloneNode.style.boxShadow = 'none';
+
       exportHost = document.createElement('div');
       exportHost.style.position = 'fixed';
-      exportHost.style.top = '-9999px';
-      exportHost.style.left = '-9999px';
+      exportHost.style.top = '0px';
+      exportHost.style.left = '0px';
       exportHost.style.width = `${canvasWidth}px`;
       exportHost.style.height = `${canvasHeight}px`;
-      exportHost.style.transform = 'none';
-      exportHost.style.zIndex = '-9999';
+      exportHost.style.opacity = '0';
+      exportHost.style.zIndex = '-99999';
       exportHost.style.pointerEvents = 'none';
+      exportHost.style.overflow = 'hidden';
+      exportHost.style.transform = 'none';
       exportHost.appendChild(cloneNode);
 
       document.body.appendChild(exportHost);
-      await new Promise(r => setTimeout(r, 150));
+      // Allow browser to perform full layout & font kerning pass
+      await new Promise(r => setTimeout(r, 200));
 
       const dataUrl = await toPng(cloneNode, {
         quality: 1,
         pixelRatio: 1,
         width: canvasWidth,
-        height: canvasHeight
+        height: canvasHeight,
+        cacheBust: false
       });
 
       const storePrefix = currentStore === STORES.PLAY_STORE ? 'google-play' : 'apple-app-store';
@@ -895,6 +908,7 @@ export default function App() {
       console.error('Export error:', err);
       alert('Could not export screenshot. Trying fallback...');
       try {
+        if (document.fonts) await document.fonts.ready;
         const dataUrl = await toPng(canvasRef.current, { quality: 1, pixelRatio: 1 });
         const link = document.createElement('a');
         link.download = `${currentDeviceId}-screenshot.png`;

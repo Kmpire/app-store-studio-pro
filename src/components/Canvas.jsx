@@ -228,7 +228,7 @@ const Canvas = forwardRef(({ state }, ref) => {
                     borderRadius: '24px',
                     color: '#ffffff',
                     fontSize: `${Math.round((text.titleSize || 60) * 0.32)}px`,
-                    fontFamily: text.fontFamily,
+                    fontFamily: `"${text.fontFamily || 'Cairo'}", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`,
                     fontWeight: 700,
                     letterSpacing: '0.04em',
                     border: '2px solid #3b82f6',
@@ -254,7 +254,7 @@ const Canvas = forwardRef(({ state }, ref) => {
                     borderRadius: '24px',
                     color: '#ffffff',
                     fontSize: `${Math.round((text.titleSize || 60) * 0.32)}px`,
-                    fontFamily: text.fontFamily,
+                    fontFamily: `"${text.fontFamily || 'Cairo'}", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`,
                     fontWeight: 700,
                     letterSpacing: '0.04em',
                     border: '1px solid rgba(255, 255, 255, 0.3)',
@@ -295,9 +295,9 @@ const Canvas = forwardRef(({ state }, ref) => {
                     width: '100%',
                     fontSize: `${text.titleSize}px`,
                     color: text.titleColor,
-                    fontFamily: text.fontFamily,
+                    fontFamily: `"${text.fontFamily || 'Cairo'}", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`,
                     fontWeight: text.fontWeight || 800,
-                    lineHeight: 1.15,
+                    lineHeight: 1.25,
                     textAlign: text.align,
                     backgroundColor: 'rgba(15, 23, 42, 0.85)',
                     backdropFilter: 'blur(12px)',
@@ -307,7 +307,9 @@ const Canvas = forwardRef(({ state }, ref) => {
                     outline: 'none',
                     resize: 'none',
                     boxShadow: '0 0 25px rgba(59, 130, 246, 0.6)',
-                    boxSizing: 'border-box'
+                    boxSizing: 'border-box',
+                    wordBreak: 'break-word',
+                    overflowWrap: 'break-word'
                   }}
                 />
               ) : (
@@ -321,9 +323,9 @@ const Canvas = forwardRef(({ state }, ref) => {
                   style={{
                     fontSize: `${text.titleSize}px`,
                     color: text.titleColor,
-                    fontFamily: text.fontFamily,
+                    fontFamily: `"${text.fontFamily || 'Cairo'}", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`,
                     fontWeight: text.fontWeight || 800,
-                    lineHeight: 1.15,
+                    lineHeight: 1.25,
                     margin: 0,
                     whiteSpace: 'pre-wrap',
                     textShadow: '0 6px 20px rgba(0,0,0,0.5)',
@@ -331,7 +333,9 @@ const Canvas = forwardRef(({ state }, ref) => {
                     borderRadius: '8px',
                     padding: '4px 6px',
                     display: 'inline-block',
-                    maxWidth: '100%'
+                    maxWidth: '100%',
+                    wordBreak: 'break-word',
+                    overflowWrap: 'break-word'
                   }}
                 >
                   {text.title}
@@ -366,9 +370,9 @@ const Canvas = forwardRef(({ state }, ref) => {
                     width: '100%',
                     fontSize: `${text.subtitleSize}px`,
                     color: text.subtitleColor,
-                    fontFamily: text.fontFamily,
+                    fontFamily: `"${text.fontFamily || 'Cairo'}", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`,
                     fontWeight: 500,
-                    lineHeight: 1.35,
+                    lineHeight: 1.45,
                     textAlign: text.align,
                     backgroundColor: 'rgba(15, 23, 42, 0.85)',
                     backdropFilter: 'blur(12px)',
@@ -378,7 +382,9 @@ const Canvas = forwardRef(({ state }, ref) => {
                     outline: 'none',
                     resize: 'none',
                     boxShadow: '0 0 25px rgba(59, 130, 246, 0.6)',
-                    boxSizing: 'border-box'
+                    boxSizing: 'border-box',
+                    wordBreak: 'break-word',
+                    overflowWrap: 'break-word'
                   }}
                 />
               ) : (
@@ -392,10 +398,10 @@ const Canvas = forwardRef(({ state }, ref) => {
                   style={{
                     fontSize: `${text.subtitleSize}px`,
                     color: text.subtitleColor,
-                    fontFamily: text.fontFamily,
+                    fontFamily: `"${text.fontFamily || 'Cairo'}", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`,
                     fontWeight: 500,
                     opacity: 0.94,
-                    lineHeight: 1.35,
+                    lineHeight: 1.45,
                     margin: 0,
                     whiteSpace: 'pre-wrap',
                     textShadow: '0 4px 14px rgba(0,0,0,0.5)',
@@ -403,7 +409,9 @@ const Canvas = forwardRef(({ state }, ref) => {
                     borderRadius: '8px',
                     padding: '4px 6px',
                     display: 'inline-block',
-                    maxWidth: '100%'
+                    maxWidth: '100%',
+                    wordBreak: 'break-word',
+                    overflowWrap: 'break-word'
                   }}
                 >
                   {text.subtitle}
