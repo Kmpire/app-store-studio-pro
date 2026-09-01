@@ -631,7 +631,7 @@ export default function App() {
       setActiveDeviceId('device-2');
       setText(p => ({
         ...p,
-        badgeText: 'AVAILABLE ON IOS & ANDROID',
+        badgeText: '',
         title: 'Available on iOS & Android',
         subtitle: 'Get the best experience on App Store & Google Play.',
         align: 'center',
@@ -855,6 +855,15 @@ export default function App() {
     let exportHost = null;
     try {
       const cloneNode = canvasRef.current.cloneNode(true);
+      
+      // Remove any UI overlays (focus badges, edit outlines) from exported graphic
+      cloneNode.querySelectorAll('.studio-ui-only').forEach(el => el.remove());
+      cloneNode.querySelectorAll('.device-mockup-chassis').forEach(el => {
+        const normalBorder = el.getAttribute('data-normal-border');
+        const normalShadow = el.getAttribute('data-normal-shadow');
+        if (normalBorder) el.style.border = normalBorder;
+        if (normalShadow) el.style.boxShadow = normalShadow;
+      });
       
       exportHost = document.createElement('div');
       exportHost.style.position = 'fixed';

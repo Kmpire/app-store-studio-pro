@@ -16,7 +16,7 @@ import {
   ArrowDown
 } from 'lucide-react';
 import { HexColorPicker } from 'react-colorful';
-import { STORES, DEVICE_CONFIGS, FRAME_FINISHES, CAMERA_STYLES, STORE_GRADIENT_PRESETS } from '../constants/storeConfigs';
+import { STORES, DEVICE_CONFIGS, FRAME_FINISHES, STORE_GRADIENT_PRESETS } from '../constants/storeConfigs';
 
 const ColorPickerPopover = ({ label, color, onChange }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -117,7 +117,11 @@ export default function Sidebar({ state }) {
     d => d.store === currentStore
   );
 
-  const isPlayStore = currentStore === STORES.PLAY_STORE;
+  const activeDeviceConfig = DEVICE_CONFIGS[deviceState?.configId] || currentDeviceConfig || DEVICE_CONFIGS['iphone-6-7'];
+  const isActiveDeviceAndroid = activeDeviceConfig.store === STORES.PLAY_STORE || activeDeviceConfig.type?.includes('android');
+  const isActiveDeviceIphone = activeDeviceConfig.type === 'iphone';
+  const isActiveDeviceTablet = activeDeviceConfig.type?.includes('tablet') || activeDeviceConfig.type === 'ipad';
+
   const [presetCategory, setPresetCategory] = useState('auto');
   const activePresetCategory = presetCategory === 'auto'
     ? (devicesList.length <= 1 ? '1-phone' : devicesList.length === 2 ? '2-phones' : '3-phones')
@@ -488,22 +492,39 @@ export default function Sidebar({ state }) {
                 </div>
               )}
 
-              {/* Android Notch / Punch-hole Selection */}
-              {isPlayStore && !isFeatureGraphic && (
-                <div className="control-row mt-4">
-                  <span className="label">Punch-Hole Camera</span>
-                  <select
-                    className="select-input"
-                    style={{ width: '180px' }}
-                    value={deviceState.cameraStyleOverride || currentDeviceConfig?.cameraStyle || 'punch-hole-center'}
-                    onChange={(e) => setDeviceState(p => ({ ...p, cameraStyleOverride: e.target.value }))}
-                  >
-                    {CAMERA_STYLES.map(c => (
-                      <option key={c.id} value={c.id}>{c.name}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
+              {/* Camera / Notch / Sensor Selection (Bound dynamically to Active Device Model) */}
+              <div className="control-row mt-4">
+                <span className="label">
+                  {isActiveDeviceIphone ? 'Camera / Notch Style' : isActiveDeviceAndroid && !isActiveDeviceTablet ? 'Punch-Hole Camera' : 'Camera Sensor'}
+                </span>
+                <select
+                  className="select-input"
+                  style={{ width: '180px' }}
+                  value={deviceState.cameraStyleOverride || activeDeviceConfig?.cameraStyle || (isActiveDeviceIphone ? 'dynamic-island' : 'punch-hole-center')}
+                  onChange={(e) => setDeviceState(p => ({ ...p, cameraStyleOverride: e.target.value }))}
+                >
+                  {isActiveDeviceIphone ? (
+                    <>
+                      <option value="dynamic-island">Dynamic Island</option>
+                      <option value="notch">Classic Notch</option>
+                      <option value="hidden">Hidden / Clean</option>
+                    </>
+                  ) : isActiveDeviceAndroid && !isActiveDeviceTablet ? (
+                    <>
+                      <option value="punch-hole-center">Centered Punch Hole</option>
+                      <option value="punch-hole-left">Left Punch Hole</option>
+                      <option value="punch-hole-right">Right Punch Hole</option>
+                      <option value="pill-camera">Pill Camera</option>
+                      <option value="hidden">Hidden / Clean</option>
+                    </>
+                  ) : (
+                    <>
+                      <option value="tablet-sensor">Tablet Camera Sensor</option>
+                      <option value="hidden">Hidden / Clean</option>
+                    </>
+                  )}
+                </select>
+              </div>
 
               {/* Glass Glare Reflection Toggle */}
               <div className="control-row mt-3">

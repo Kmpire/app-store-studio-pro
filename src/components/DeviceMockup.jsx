@@ -117,7 +117,14 @@ export default function DeviceMockup({
 
   return (
     <div
-      onMouseDown={handleDeviceClick}
+      onClick={(e) => {
+        e.stopPropagation();
+        if (onSelect) onSelect(id);
+      }}
+      onMouseDown={(e) => {
+        e.stopPropagation();
+        handleDeviceClick(e);
+      }}
       onDragOver={handleDragOver}
       onDragEnter={handleDragEnter}
       onDragLeave={handleDragLeave}
@@ -137,15 +144,16 @@ export default function DeviceMockup({
         transition: 'transform 0.05s ease-out'
       }}
     >
-      {/* Optional Selected Device Floating Badge */}
-      {showDeviceBadge && (
+      {/* Optional Selected Device Floating Badge (Studio UI only, excluded from export) */}
+      {showDeviceBadge && isSelected && (
         <div
+          className="studio-ui-only"
           style={{
             position: 'absolute',
             top: '-32px',
             left: '50%',
             transform: 'translateX(-50%)',
-            backgroundColor: isSelected ? 'rgba(59, 130, 246, 0.95)' : 'rgba(15, 23, 42, 0.85)',
+            backgroundColor: 'rgba(59, 130, 246, 0.95)',
             color: '#ffffff',
             padding: '3px 10px',
             borderRadius: '12px',
@@ -153,7 +161,7 @@ export default function DeviceMockup({
             fontWeight: 700,
             fontFamily: 'Inter, sans-serif',
             boxShadow: '0 4px 12px rgba(0, 0, 0, 0.4)',
-            border: isSelected ? '1px solid #60a5fa' : '1px solid rgba(255, 255, 255, 0.15)',
+            border: '1px solid #60a5fa',
             pointerEvents: 'none',
             whiteSpace: 'nowrap',
             zIndex: 40,
@@ -164,12 +172,15 @@ export default function DeviceMockup({
         >
           <span>📱</span>
           <span>{deviceName}</span>
-          {isSelected && <span style={{ opacity: 0.8, fontSize: '9px' }}>● Active</span>}
+          <span style={{ opacity: 0.85, fontSize: '9px' }}>● Active</span>
         </div>
       )}
 
       {/* Outer Device Chassis Frame */}
       <div
+        className={`device-mockup-chassis ${isSelected && showDeviceBadge ? 'device-focus-outline' : ''}`}
+        data-normal-border={`2px solid ${frameBorderColor}`}
+        data-normal-shadow="inset 0 0 8px rgba(255, 255, 255, 0.25), inset 0 0 16px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(0,0,0,0.6)"
         style={{
           width: '100%',
           height: '100%',

@@ -165,6 +165,7 @@ const Canvas = forwardRef(({ state }, ref) => {
       onDrop={handleDrop}
       onClick={() => {
         if (editingField) setEditingField(null);
+        setActiveDeviceId(null);
       }}
     >
       {/* Background Layer */}
