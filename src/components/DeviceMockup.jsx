@@ -1,10 +1,12 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { FRAME_FINISHES } from '../constants/storeConfigs';
 
 /**
  * Universal Device Mockup supporting iPhone, iPad, Android Flagships, Tablets, & Foldables.
  */
 export default function DeviceMockup({
+  id,
+  deviceName = 'Device',
   deviceConfig,
   orientation = 'portrait',
   rotation = 0,
@@ -22,8 +24,15 @@ export default function DeviceMockup({
   cameraStyleOverride = null,
   showGlare = false,
   isDraggingOver = false,
-  onMouseDown
+  isSelected = false,
+  showDeviceBadge = false,
+  zIndex = 10,
+  onMouseDown,
+  onSelect,
+  onDropScreenshot
 }) {
+  const [isSelfDraggingOver, setIsSelfDraggingOver] = useState(false);
+
   const isLandscape = orientation === 'landscape';
   const type = deviceConfig?.type || 'iphone';
   const isIphone = type === 'iphone';
@@ -59,9 +68,60 @@ export default function DeviceMockup({
   // Active camera style
   const activeCameraStyle = cameraStyleOverride || deviceConfig?.cameraStyle || (isAndroidPhone ? 'punch-hole-center' : 'dynamic-island');
 
+  const activeDragHighlight = isSelfDraggingOver || isDraggingOver;
+
+  // Targeted drag and drop handlers per mockup
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!isSelfDraggingOver) setIsSelfDraggingOver(true);
+  };
+
+  const handleDragEnter = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsSelfDraggingOver(true);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.currentTarget && !e.currentTarget.contains(e.relatedTarget)) {
+      setIsSelfDraggingOver(false);
+    }
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsSelfDraggingOver(false);
+
+    if (e.dataTransfer?.files?.length > 0) {
+      const file = e.dataTransfer.files[0];
+      if (file && file.type.startsWith('image/')) {
+        const reader = new FileReader();
+        reader.onload = (evt) => {
+          if (onDropScreenshot) {
+            onDropScreenshot(evt.target.result, id);
+          }
+        };
+        reader.readAsDataURL(file);
+      }
+    }
+  };
+
+  const handleDeviceClick = (e) => {
+    if (onSelect) onSelect(id);
+    if (onMouseDown) onMouseDown(e, id);
+  };
+
   return (
     <div
-      onMouseDown={onMouseDown}
+      onMouseDown={handleDeviceClick}
+      onDragOver={handleDragOver}
+      onDragEnter={handleDragEnter}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
       style={{
         position: 'absolute',
         top: '50%',
@@ -72,11 +132,42 @@ export default function DeviceMockup({
         transformOrigin: 'center center',
         cursor: 'grab',
         userSelect: 'none',
-        zIndex: 10,
+        zIndex: zIndex || 10,
         filter: `drop-shadow(0 35px 70px rgba(0, 0, 0, ${shadowIntensity}))`,
         transition: 'transform 0.05s ease-out'
       }}
     >
+      {/* Optional Selected Device Floating Badge */}
+      {showDeviceBadge && (
+        <div
+          style={{
+            position: 'absolute',
+            top: '-32px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            backgroundColor: isSelected ? 'rgba(59, 130, 246, 0.95)' : 'rgba(15, 23, 42, 0.85)',
+            color: '#ffffff',
+            padding: '3px 10px',
+            borderRadius: '12px',
+            fontSize: '11px',
+            fontWeight: 700,
+            fontFamily: 'Inter, sans-serif',
+            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.4)',
+            border: isSelected ? '1px solid #60a5fa' : '1px solid rgba(255, 255, 255, 0.15)',
+            pointerEvents: 'none',
+            whiteSpace: 'nowrap',
+            zIndex: 40,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '4px'
+          }}
+        >
+          <span>📱</span>
+          <span>{deviceName}</span>
+          {isSelected && <span style={{ opacity: 0.8, fontSize: '9px' }}>● Active</span>}
+        </div>
+      )}
+
       {/* Outer Device Chassis Frame */}
       <div
         style={{
@@ -87,11 +178,15 @@ export default function DeviceMockup({
           padding: padding,
           boxSizing: 'border-box',
           position: 'relative',
-          border: isDraggingOver
-            ? '2px solid #3b82f6'
+          border: activeDragHighlight
+            ? '2.5px solid #38bdf8'
+            : isSelected && showDeviceBadge
+            ? '2px solid rgba(59, 130, 246, 0.8)'
             : `2px solid ${frameBorderColor}`,
-          boxShadow: isDraggingOver
-            ? '0 0 0 4px rgba(59, 130, 246, 0.4), 0 0 25px rgba(59, 130, 246, 0.5), inset 0 0 12px rgba(59, 130, 246, 0.3)'
+          boxShadow: activeDragHighlight
+            ? '0 0 0 4px rgba(56, 189, 248, 0.5), 0 0 35px rgba(56, 189, 248, 0.7), inset 0 0 16px rgba(56, 189, 248, 0.4)'
+            : isSelected && showDeviceBadge
+            ? '0 0 0 3px rgba(59, 130, 246, 0.35), inset 0 0 8px rgba(255, 255, 255, 0.25), inset 0 0 16px rgba(0, 0, 0, 0.8)'
             : 'inset 0 0 8px rgba(255, 255, 255, 0.25), inset 0 0 16px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(0,0,0,0.6)',
           transition: 'border-color 0.2s ease, box-shadow 0.2s ease'
         }}

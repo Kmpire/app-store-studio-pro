@@ -1,5 +1,6 @@
-import React, { forwardRef, useState, useEffect } from 'react';
+import React, { forwardRef, useState } from 'react';
 import DeviceMockup from './DeviceMockup';
+import { DEVICE_CONFIGS } from '../constants/storeConfigs';
 
 const Canvas = forwardRef(({ state }, ref) => {
   const { 
@@ -9,11 +10,14 @@ const Canvas = forwardRef(({ state }, ref) => {
     bgState,
     text,
     setText,
-    deviceState,
-    setDeviceState
+    devicesList = [],
+    activeDeviceId,
+    setActiveDeviceId,
+    updateDevice,
+    deviceState
   } = state;
 
-  const [isDraggingDevice, setIsDraggingDevice] = useState(false);
+  const [draggingDeviceId, setDraggingDeviceId] = useState(null);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [isDraggingOver, setIsDraggingOver] = useState(false);
   const [editingField, setEditingField] = useState(null); // 'badge' | 'title' | 'subtitle' | null
@@ -66,28 +70,30 @@ const Canvas = forwardRef(({ state }, ref) => {
     return <div style={{ position: 'absolute', inset: 0, backgroundColor: '#0f172a' }} />;
   };
 
-  const handleMouseDown = (e) => {
+  const handleDeviceMouseDown = (e, devId) => {
     if (editingField) return;
     e.stopPropagation();
-    setIsDraggingDevice(true);
+    setActiveDeviceId(devId);
+    setDraggingDeviceId(devId);
+    const dev = devicesList.find(d => d.id === devId) || deviceState;
     setDragStart({
-      x: e.clientX - (deviceState.frameX || 0),
-      y: e.clientY - (deviceState.frameY || 0)
+      x: e.clientX - (dev?.frameX || 0),
+      y: e.clientY - (dev?.frameY || 0)
     });
   };
 
   const handleMouseMove = (e) => {
-    if (!isDraggingDevice) return;
+    if (!draggingDeviceId) return;
     const newX = e.clientX - dragStart.x;
     const newY = e.clientY - dragStart.y;
-    setDeviceState(prev => ({ ...prev, frameX: newX, frameY: newY }));
+    updateDevice(draggingDeviceId, prev => ({ ...prev, frameX: newX, frameY: newY }));
   };
 
   const handleMouseUp = () => {
-    setIsDraggingDevice(false);
+    setDraggingDeviceId(null);
   };
 
-  // Drag and Drop File Handlers
+  // Drag and Drop File Handlers for Canvas Background Drop Fallback
   const handleDragOver = (e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -120,11 +126,18 @@ const Canvas = forwardRef(({ state }, ref) => {
       if (file && file.type.startsWith('image/')) {
         const reader = new FileReader();
         reader.onload = (evt) => {
-          setDeviceState(prev => ({ ...prev, screenshot: evt.target.result }));
+          if (activeDeviceId) {
+            updateDevice(activeDeviceId, { screenshot: evt.target.result });
+          }
         };
         reader.readAsDataURL(file);
       }
     }
+  };
+
+  const handleDropScreenshotOnDevice = (dataUrl, devId) => {
+    updateDevice(devId, { screenshot: dataUrl });
+    setActiveDeviceId(devId);
   };
 
   const isFeatureGraphic = currentDeviceConfig?.type === 'feature-graphic';
@@ -400,27 +413,64 @@ const Canvas = forwardRef(({ state }, ref) => {
         </div>
       )}
 
-      {/* Device Mockup */}
-      <DeviceMockup
-        deviceConfig={currentDeviceConfig}
-        orientation={deviceState.orientation || 'portrait'}
-        rotation={deviceState.rotation || 0}
-        screenshot={deviceState.screenshot}
-        fitMode={deviceState.fitMode || 'cover'}
-        innerZoom={deviceState.innerZoom || 1}
-        innerX={deviceState.innerX || 0}
-        innerY={deviceState.innerY || 0}
-        frameScale={deviceState.frameScale || currentDeviceConfig?.defaultScale || 1.8}
-        frameX={deviceState.frameX || 0}
-        frameY={deviceState.frameY !== undefined ? deviceState.frameY : (currentDeviceConfig?.defaultY || 300)}
-        shadowIntensity={deviceState.shadowIntensity !== undefined ? deviceState.shadowIntensity : 0.5}
-        frameFinishId={deviceState.frameFinishId || 'titanium-dark'}
-        customFrameColor={deviceState.customFrameColor || '#2d2d32'}
-        cameraStyleOverride={deviceState.cameraStyleOverride || null}
-        showGlare={deviceState.showGlare || false}
-        isDraggingOver={isDraggingOver}
-        onMouseDown={handleMouseDown}
-      />
+      {/* Multi-Device Mockups */}
+      {devicesList && devicesList.length > 0 ? (
+        devicesList.map((dev) => {
+          const devConfig = DEVICE_CONFIGS[dev.configId] || currentDeviceConfig;
+          const isSelected = dev.id === activeDeviceId;
+          return (
+            <DeviceMockup
+              key={dev.id}
+              id={dev.id}
+              deviceName={dev.name}
+              deviceConfig={devConfig}
+              orientation={dev.orientation || 'portrait'}
+              rotation={dev.rotation || 0}
+              screenshot={dev.screenshot}
+              fitMode={dev.fitMode || 'cover'}
+              innerZoom={dev.innerZoom || 1}
+              innerX={dev.innerX || 0}
+              innerY={dev.innerY || 0}
+              frameScale={dev.frameScale || devConfig?.defaultScale || 1.8}
+              frameX={dev.frameX || 0}
+              frameY={dev.frameY !== undefined ? dev.frameY : (devConfig?.defaultY || 300)}
+              shadowIntensity={dev.shadowIntensity !== undefined ? dev.shadowIntensity : 0.5}
+              frameFinishId={dev.frameFinishId || 'titanium-dark'}
+              customFrameColor={dev.customFrameColor || '#2d2d32'}
+              cameraStyleOverride={dev.cameraStyleOverride || null}
+              showGlare={dev.showGlare || false}
+              isDraggingOver={isDraggingOver && isSelected}
+              isSelected={isSelected}
+              showDeviceBadge={devicesList.length > 1}
+              zIndex={dev.zIndex || 10}
+              onMouseDown={handleDeviceMouseDown}
+              onSelect={setActiveDeviceId}
+              onDropScreenshot={handleDropScreenshotOnDevice}
+            />
+          );
+        })
+      ) : (
+        <DeviceMockup
+          deviceConfig={currentDeviceConfig}
+          orientation={deviceState.orientation || 'portrait'}
+          rotation={deviceState.rotation || 0}
+          screenshot={deviceState.screenshot}
+          fitMode={deviceState.fitMode || 'cover'}
+          innerZoom={deviceState.innerZoom || 1}
+          innerX={deviceState.innerX || 0}
+          innerY={deviceState.innerY || 0}
+          frameScale={deviceState.frameScale || currentDeviceConfig?.defaultScale || 1.8}
+          frameX={deviceState.frameX || 0}
+          frameY={deviceState.frameY !== undefined ? deviceState.frameY : (currentDeviceConfig?.defaultY || 300)}
+          shadowIntensity={deviceState.shadowIntensity !== undefined ? deviceState.shadowIntensity : 0.5}
+          frameFinishId={deviceState.frameFinishId || 'titanium-dark'}
+          customFrameColor={deviceState.customFrameColor || '#2d2d32'}
+          cameraStyleOverride={deviceState.cameraStyleOverride || null}
+          showGlare={deviceState.showGlare || false}
+          isDraggingOver={isDraggingOver}
+          onMouseDown={(e) => handleDeviceMouseDown(e, 'default')}
+        />
+      )}
     </div>
   );
 });

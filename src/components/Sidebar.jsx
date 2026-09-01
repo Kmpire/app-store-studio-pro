@@ -8,7 +8,12 @@ import {
   Sparkles, 
   Maximize, 
   Crop, 
-  FileUp
+  FileUp,
+  Copy,
+  Trash2,
+  Layers,
+  ArrowUp,
+  ArrowDown
 } from 'lucide-react';
 import { HexColorPicker } from 'react-colorful';
 import { STORES, DEVICE_CONFIGS, FRAME_FINISHES, CAMERA_STYLES, STORE_GRADIENT_PRESETS } from '../constants/storeConfigs';
@@ -73,8 +78,16 @@ export default function Sidebar({ state }) {
     currentDeviceId,
     switchDevice,
     currentDeviceConfig,
+    devicesList = [],
+    activeDeviceId,
+    setActiveDeviceId,
     deviceState,
     setDeviceState,
+    updateDevice,
+    addDevice,
+    removeDevice,
+    duplicateDevice,
+    reorderDevice,
     bgState,
     setBgState,
     text,
@@ -105,6 +118,11 @@ export default function Sidebar({ state }) {
   );
 
   const isPlayStore = currentStore === STORES.PLAY_STORE;
+  const [presetCategory, setPresetCategory] = useState('auto');
+  const activePresetCategory = presetCategory === 'auto'
+    ? (devicesList.length <= 1 ? '1-phone' : devicesList.length === 2 ? '2-phones' : '3-phones')
+    : presetCategory;
+
   const isFeatureGraphic = currentDeviceId === 'play-feature-graphic';
 
   const colorSwatches = [
@@ -141,7 +159,7 @@ export default function Sidebar({ state }) {
 
       {/* 2. DEVICE / FORMAT SELECTOR */}
       <div className="device-selection-area">
-        <label className="label-sm mb-1">Select Store Format & Device</label>
+        <label className="label-sm mb-1">Select Canvas Format Dimensions</label>
         <div className="device-pills-scroll">
           {currentStoreDevices.map(d => (
             <button
@@ -176,28 +194,177 @@ export default function Sidebar({ state }) {
         {/* ========================================================================= */}
         {activeTab === 'device' && (
           <div className="section-group">
-            {/* Screenshot Upload */}
-            <h3 className="section-title">App Screenshot</h3>
-            <label className="upload-box">
-              <Upload size={20} />
-              <span>{deviceState.screenshot ? 'Change Screenshot' : `Upload ${currentDeviceConfig?.name || 'Device'} Screenshot`}</span>
-              <input 
-                type="file" 
-                accept="image/*" 
-                onChange={(e) => handleFileUpload(e, (url) => setDeviceState(p => ({ ...p, screenshot: url })))} 
-              />
-            </label>
+
+            {/* MULTI-DEVICE MANAGER */}
+            <div className="multi-device-box mb-4">
+              <div className="flex-between mb-2">
+                <span className="section-title mb-0" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Layers size={14} color="var(--accent)" /> Phone Mockups ({devicesList.length})
+                </span>
+                <div style={{ display: 'flex', gap: '4px' }}>
+                  <button
+                    className="add-phone-btn"
+                    onClick={() => addDevice('iphone-6-7')}
+                    title="Add an Apple iPhone mockup"
+                  >
+                    + 🍎 iPhone
+                  </button>
+                  <button
+                    className="add-phone-btn"
+                    onClick={() => addDevice('android-phone')}
+                    title="Add a Google Android flagship mockup"
+                  >
+                    + 🤖 Android
+                  </button>
+                </div>
+              </div>
+
+              {/* Multi-Device Tabs */}
+              <div className="multi-device-tab-bar">
+                {devicesList.map((dev) => {
+                  const isActive = activeDeviceId === dev.id;
+                  return (
+                    <button
+                      key={dev.id}
+                      className={`multi-device-tab ${isActive ? 'active' : ''}`}
+                      onClick={() => setActiveDeviceId(dev.id)}
+                    >
+                      <span>📱</span>
+                      <span className="tab-dev-name">{dev.name}</span>
+                      {devicesList.length > 1 && (
+                        <span
+                          className="tab-dev-remove"
+                          title="Remove phone"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            removeDevice(dev.id);
+                          }}
+                        >
+                          ×
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Quick Actions for Active Device */}
+              <div className="active-dev-toolbar mt-2">
+                <button
+                  className="dev-action-btn"
+                  onClick={() => duplicateDevice(activeDeviceId)}
+                  title="Duplicate this phone"
+                >
+                  <Copy size={12} /> Duplicate
+                </button>
+                <button
+                  className="dev-action-btn"
+                  onClick={() => reorderDevice(activeDeviceId, 'forward')}
+                  title="Bring forward in layer order"
+                >
+                  <ArrowUp size={12} /> Forward
+                </button>
+                <button
+                  className="dev-action-btn"
+                  onClick={() => reorderDevice(activeDeviceId, 'backward')}
+                  title="Send backward in layer order"
+                >
+                  <ArrowDown size={12} /> Backward
+                </button>
+                {devicesList.length > 1 && (
+                  <button
+                    className="dev-action-btn danger"
+                    onClick={() => removeDevice(activeDeviceId)}
+                    title="Delete this phone"
+                  >
+                    <Trash2 size={12} /> Delete
+                  </button>
+                )}
+              </div>
+
+              {/* Active Phone Model Switcher */}
+              <div className="control-row mt-3 pt-2" style={{ borderTop: '1px solid var(--border-light)' }}>
+                <span className="label" style={{ fontSize: '11px' }}>Selected Phone Model</span>
+                <select
+                  className="select-input"
+                  style={{ width: '185px', fontSize: '11px', padding: '4px 8px' }}
+                  value={deviceState.configId || currentDeviceId}
+                  onChange={(e) => {
+                    const newConfigId = e.target.value;
+                    const targetCfg = DEVICE_CONFIGS[newConfigId];
+                    updateDevice(activeDeviceId, {
+                      configId: newConfigId,
+                      frameScale: targetCfg?.defaultScale || deviceState.frameScale || 1.8,
+                      frameY: targetCfg?.defaultY !== undefined ? targetCfg.defaultY : deviceState.frameY
+                    });
+                  }}
+                >
+                  <optgroup label="🍎 Apple App Store Devices">
+                    {Object.values(DEVICE_CONFIGS).filter(d => d.store === STORES.APP_STORE).map(d => (
+                      <option key={d.id} value={d.id}>{d.name}</option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="🤖 Google Play Store Devices">
+                    {Object.values(DEVICE_CONFIGS).filter(d => d.store === STORES.PLAY_STORE).map(d => (
+                      <option key={d.id} value={d.id}>{d.name}</option>
+                    ))}
+                  </optgroup>
+                </select>
+              </div>
+            </div>
 
             {/* Quick Layout Presets */}
-            <h3 className="section-title mt-6">
-              <Sparkles size={14} style={{ marginRight: 6, color: 'var(--accent)' }} /> 
-              Instant Layout Presets
-            </h3>
+            <div className="flex-between mt-3 mb-2">
+              <h3 className="section-title mb-0" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Sparkles size={14} color="var(--accent)" /> Instant Layout Presets
+              </h3>
+            </div>
+
+            {/* Dynamic Preset Category Filter Chips */}
+            {!isFeatureGraphic && (
+              <div className="preset-chips-row">
+                <button
+                  className={`preset-chip ${presetCategory === 'auto' ? 'active' : ''}`}
+                  onClick={() => setPresetCategory('auto')}
+                  title="Automatically show presets matching current number of phones"
+                >
+                  ⚡ Auto ({devicesList.length} Phone{devicesList.length > 1 ? 's' : ''})
+                </button>
+                <button
+                  className={`preset-chip ${presetCategory === '1-phone' ? 'active' : ''}`}
+                  onClick={() => setPresetCategory('1-phone')}
+                >
+                  📱 1 Phone
+                </button>
+                <button
+                  className={`preset-chip ${presetCategory === '2-phones' ? 'active' : ''}`}
+                  onClick={() => setPresetCategory('2-phones')}
+                >
+                  📱📱 2 Phones
+                </button>
+                <button
+                  className={`preset-chip ${presetCategory === '3-phones' ? 'active' : ''}`}
+                  onClick={() => setPresetCategory('3-phones')}
+                >
+                  🌟 3+ Phones
+                </button>
+                <button
+                  className={`preset-chip ${presetCategory === 'all' ? 'active' : ''}`}
+                  onClick={() => setPresetCategory('all')}
+                >
+                  All
+                </button>
+              </div>
+            )}
+
             <div className="preset-grid">
               {isFeatureGraphic ? (
                 <>
                   <button className="preset-btn" onClick={() => applyPreset('bannerRight')}>
-                    📐 Right Mockup Banner
+                    📐 1 Mockup Right
+                  </button>
+                  <button className="preset-btn" onClick={() => applyPreset('bannerDualRight')}>
+                    📱📱 2 Mockups Banner
                   </button>
                   <button className="preset-btn" onClick={() => applyPreset('bannerCenter')}>
                     🌟 Centered Showcase
@@ -206,26 +373,90 @@ export default function Sidebar({ state }) {
                     🚀 3D Angled Hero
                   </button>
                   <button className="preset-btn" onClick={() => applyPreset('bannerTextOnly')}>
-                    📝 Clean Graphic Title
+                    📝 Clean Title Only
                   </button>
                 </>
               ) : (
                 <>
-                  <button className="preset-btn" onClick={() => applyPreset('centered')}>
-                    🌟 Centered Hero
-                  </button>
-                  <button className="preset-btn" onClick={() => applyPreset('bottomPeek')}>
-                    📱 Bottom Peek
-                  </button>
-                  <button className="preset-btn" onClick={() => applyPreset('slanted')}>
-                    📐 Slanted 3D
-                  </button>
-                  <button className="preset-btn" onClick={() => applyPreset('fullFit')}>
-                    ↔️ Full Fill
-                  </button>
+                  {/* Single Phone Presets */}
+                  {(activePresetCategory === '1-phone' || activePresetCategory === 'all') && (
+                    <>
+                      <button className="preset-btn" onClick={() => applyPreset('centered')}>
+                        🌟 Centered Hero
+                      </button>
+                      <button className="preset-btn" onClick={() => applyPreset('bottomPeek')}>
+                        📱 Bottom Peek
+                      </button>
+                      <button className="preset-btn" onClick={() => applyPreset('slanted')}>
+                        📐 Slanted Left (-12°)
+                      </button>
+                      <button className="preset-btn" onClick={() => applyPreset('slantedRight')}>
+                        📐 Slanted Right (+12°)
+                      </button>
+                      <button className="preset-btn" onClick={() => applyPreset('fullFit')}>
+                        ↔️ Full Fill
+                      </button>
+                      <button className="preset-btn" onClick={() => applyPreset('floatingHero')}>
+                        🚀 Floating Hero
+                      </button>
+                    </>
+                  )}
+
+                  {/* Dual Phone Presets */}
+                  {(activePresetCategory === '2-phones' || activePresetCategory === 'all') && (
+                    <>
+                      <button className="preset-btn" onClick={() => applyPreset('dualSide')}>
+                        📱📱 2 Side-by-Side
+                      </button>
+                      <button className="preset-btn" onClick={() => applyPreset('dualOverlap')}>
+                        📐 2 3D Overlapping
+                      </button>
+                      <button className="preset-btn" onClick={() => applyPreset('dualPerspective')}>
+                        🚀 2 Perspective Angled
+                      </button>
+                      <button className="preset-btn" onClick={() => applyPreset('crossPlatformDuo')}>
+                        🍏🤖 iOS + Android Duo
+                      </button>
+                      <button className="preset-btn" onClick={() => applyPreset('bottomPeekDual')}>
+                        📱📱 2 Bottom Peek
+                      </button>
+                      <button className="preset-btn" onClick={() => applyPreset('dualFloating')}>
+                        🚀 2 Floating Duo
+                      </button>
+                    </>
+                  )}
+
+                  {/* Triple / Multi Phone Presets */}
+                  {(activePresetCategory === '3-phones' || activePresetCategory === 'all') && (
+                    <>
+                      <button className="preset-btn" onClick={() => applyPreset('tripleShowcase')}>
+                        🌟 3 Phones Showcase
+                      </button>
+                      <button className="preset-btn" onClick={() => applyPreset('tripleOverlap')}>
+                        📐 3 Cascade Overlap
+                      </button>
+                      <button className="preset-btn" onClick={() => applyPreset('tripleSide')}>
+                        📱📱📱 3 Flat Columns
+                      </button>
+                    </>
+                  )}
                 </>
               )}
             </div>
+
+            {/* Active Phone Screenshot Upload */}
+            <h3 className="section-title mt-6">
+              Screenshot ({deviceState.name || 'Selected Phone'})
+            </h3>
+            <label className="upload-box">
+              <Upload size={20} />
+              <span>{deviceState.screenshot ? `Change ${deviceState.name || 'Phone'} Screenshot` : `Upload ${deviceState.name || 'Phone'} Screenshot`}</span>
+              <input 
+                type="file" 
+                accept="image/*" 
+                onChange={(e) => handleFileUpload(e, (url) => setDeviceState(p => ({ ...p, screenshot: url })))} 
+              />
+            </label>
 
             {/* Device Chassis Finish & Colors */}
             <h3 className="section-title mt-6">Device Chassis & Finish</h3>
