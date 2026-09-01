@@ -3,32 +3,126 @@ import { Download, ZoomIn, ZoomOut, Maximize2 } from 'lucide-react';
 import { toPng } from 'html-to-image';
 import Sidebar from './components/Sidebar';
 import Canvas from './components/Canvas';
+import { STORES, DEVICE_CONFIGS } from './constants/storeConfigs';
 import './App.css';
 
 export default function App() {
   const canvasRef = useRef(null);
-  
-  // App Mode: 'iphone' or 'ipad'
-  const [device, setDevice] = useState('iphone');
-  
+
+  // Active Store: 'app-store' or 'play-store'
+  const [currentStore, setCurrentStore] = useState(STORES.APP_STORE);
+
+  // Active Device ID
+  const [currentDeviceId, setCurrentDeviceId] = useState('iphone-6-7');
+
+  const currentDeviceConfig = DEVICE_CONFIGS[currentDeviceId] || DEVICE_CONFIGS['iphone-6-7'];
+
   // Native dimensions
-  const canvasWidth = device === 'iphone' ? 1284 : 2048;
-  const canvasHeight = device === 'iphone' ? 2778 : 2732;
+  const canvasWidth = currentDeviceConfig.width;
+  const canvasHeight = currentDeviceConfig.height;
 
   // Viewport Zoom
   const [viewportZoom, setViewportZoom] = useState(0.24);
 
-  // Auto-fit viewport zoom on window resize or device switch
+  // Device-specific state map so customizations are preserved per device
+  const [devicesStateMap, setDevicesStateMap] = useState({});
+
+  // Shared / Active Device State
+  const activeDeviceState = devicesStateMap[currentDeviceId] || {
+    orientation: 'portrait',
+    rotation: 0,
+    screenshot: null,
+    fitMode: 'cover',
+    innerZoom: 1,
+    innerX: 0,
+    innerY: 0,
+    frameScale: currentDeviceConfig.defaultScale || 1.8,
+    frameX: 0,
+    frameY: currentDeviceConfig.defaultY !== undefined ? currentDeviceConfig.defaultY : 320,
+    shadowIntensity: 0.5,
+    frameFinishId: currentStore === STORES.PLAY_STORE ? 'titanium-dark' : 'titanium-dark',
+    customFrameColor: '#2d2d32',
+    cameraStyleOverride: null,
+    showGlare: false
+  };
+
+  const setDeviceState = (updater) => {
+    setDevicesStateMap(prev => {
+      const currentState = prev[currentDeviceId] || activeDeviceState;
+      const nextState = typeof updater === 'function' ? updater(currentState) : updater;
+      return {
+        ...prev,
+        [currentDeviceId]: {
+          ...currentState,
+          ...nextState
+        }
+      };
+    });
+  };
+
+  // Auto-fit viewport zoom on window resize or device/canvas size change
   useEffect(() => {
     const handleResize = () => {
-      const availableHeight = window.innerHeight - 100; // Leave room for top toolbar & padding
-      const calculatedScale = availableHeight / canvasHeight;
-      setViewportZoom(Math.min(Math.max(calculatedScale, 0.1), 1.0));
+      const availableHeight = window.innerHeight - 110;
+      const availableWidth = window.innerWidth - 420;
+      const scaleH = availableHeight / canvasHeight;
+      const scaleW = availableWidth / canvasWidth;
+      const calculatedScale = Math.min(scaleH, scaleW);
+      setViewportZoom(Math.min(Math.max(calculatedScale, 0.08), 1.0));
     };
     handleResize();
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
-  }, [canvasHeight]);
+  }, [canvasHeight, canvasWidth]);
+
+  // Switch Store
+  const setStore = (storeId) => {
+    setCurrentStore(storeId);
+    // Switch to first device of selected store
+    const firstDevice = Object.values(DEVICE_CONFIGS).find(d => d.store === storeId);
+    if (firstDevice) {
+      setCurrentDeviceId(firstDevice.id);
+    }
+  };
+
+  // Switch Device
+  const switchDevice = (deviceId) => {
+    const targetConfig = DEVICE_CONFIGS[deviceId];
+    if (!targetConfig) return;
+
+    setCurrentDeviceId(deviceId);
+    if (targetConfig.store !== currentStore) {
+      setCurrentStore(targetConfig.store);
+    }
+
+    // Carry over screenshot if target device state doesn't have one
+    setDevicesStateMap(prev => {
+      const existing = prev[deviceId];
+      if (!existing && activeDeviceState.screenshot) {
+        return {
+          ...prev,
+          [deviceId]: {
+            orientation: 'portrait',
+            rotation: 0,
+            screenshot: activeDeviceState.screenshot,
+            fitMode: 'cover',
+            innerZoom: 1,
+            innerX: 0,
+            innerY: 0,
+            frameScale: targetConfig.defaultScale || 1.8,
+            frameX: 0,
+            frameY: targetConfig.defaultY !== undefined ? targetConfig.defaultY : 300,
+            shadowIntensity: 0.5,
+            frameFinishId: activeDeviceState.frameFinishId || 'titanium-dark',
+            customFrameColor: activeDeviceState.customFrameColor || '#2d2d32',
+            cameraStyleOverride: null,
+            showGlare: activeDeviceState.showGlare || false
+          }
+        };
+      }
+      return prev;
+    });
+  };
 
   // Custom Font Library
   const [availableFonts, setAvailableFonts] = useState([
@@ -48,8 +142,8 @@ export default function App() {
   const [bgState, setBgState] = useState({
     type: 'gradient',
     color: '#0f172a',
-    color1: '#1e1b4b',
-    color2: '#4338ca',
+    color1: '#0f172a',
+    color2: '#0284c7',
     gradientType: 'linear',
     gradientAngle: 135,
     image: null,
@@ -61,38 +155,9 @@ export default function App() {
     overlayOpacity: 0
   });
 
-  // iPhone state
-  const [iphoneState, setIphoneState] = useState({
-    orientation: 'portrait',
-    rotation: 0,
-    screenshot: null,
-    fitMode: 'cover',
-    innerZoom: 1,
-    innerX: 0,
-    innerY: 0,
-    frameScale: 1.8,
-    frameX: 0,
-    frameY: 350,
-    shadowIntensity: 0.5
-  });
-
-  // iPad state
-  const [ipadState, setIpadState] = useState({
-    orientation: 'portrait',
-    rotation: 0,
-    screenshot: null,
-    fitMode: 'cover',
-    innerZoom: 1,
-    innerX: 0,
-    innerY: 0,
-    frameScale: 2.1,
-    frameX: 0,
-    frameY: 300,
-    shadowIntensity: 0.5
-  });
-
   // Text state
   const [text, setText] = useState({
+    badgeText: '',
     title: 'Your App Headline',
     titleSize: 110,
     titleColor: '#ffffff',
@@ -106,24 +171,49 @@ export default function App() {
 
   const [isExporting, setIsExporting] = useState(false);
 
-  // Switch between iPhone & iPad
-  const switchDeviceMode = (newMode) => {
-    setDevice(newMode);
-  };
-
-  const currentDeviceState = device === 'iphone' ? iphoneState : ipadState;
-  const setDeviceState = device === 'iphone' ? setIphoneState : setIpadState;
-
   // Apply Quick Layout Presets
   const applyPreset = (presetType) => {
+    const isFeature = currentDeviceId === 'play-feature-graphic';
+    const isTablet = currentDeviceConfig.type.includes('tablet') || currentDeviceConfig.type === 'ipad';
+    const isFold = currentDeviceConfig.type === 'android-foldable';
+
+    if (isFeature) {
+      if (presetType === 'bannerRight') {
+        setDeviceState(p => ({ ...p, frameScale: 0.95, frameX: 280, frameY: 50, rotation: -6 }));
+        setText(p => ({ ...p, align: 'left', offsetY: 50, titleSize: 56, subtitleSize: 28 }));
+      } else if (presetType === 'bannerCenter') {
+        setDeviceState(p => ({ ...p, frameScale: 0.85, frameX: 0, frameY: 160, rotation: 0 }));
+        setText(p => ({ ...p, align: 'center', offsetY: 25, titleSize: 50, subtitleSize: 24 }));
+      } else if (presetType === 'bannerSlanted') {
+        setDeviceState(p => ({ ...p, frameScale: 1.05, frameX: 290, frameY: 60, rotation: -16 }));
+        setText(p => ({ ...p, align: 'left', offsetY: 48, titleSize: 54, subtitleSize: 26 }));
+      } else if (presetType === 'bannerTextOnly') {
+        setDeviceState(p => ({ ...p, frameScale: 0.7, frameX: 350, frameY: 200, rotation: 0 }));
+        setText(p => ({ ...p, align: 'left', offsetY: 50, titleSize: 64, subtitleSize: 32 }));
+      }
+      return;
+    }
+
     if (presetType === 'centered') {
-      setDeviceState(p => ({ ...p, frameScale: device === 'ipad' ? 2.2 : 1.9, frameX: 0, frameY: 200, rotation: 0 }));
+      const scale = isTablet ? 2.2 : isFold ? 2.1 : 1.85;
+      const y = isTablet ? 300 : isFold ? 250 : 350;
+      setDeviceState(p => ({ ...p, frameScale: scale, frameX: 0, frameY: y, rotation: 0 }));
+      setText(p => ({ ...p, align: 'center', offsetY: 12 }));
     } else if (presetType === 'bottomPeek') {
-      setDeviceState(p => ({ ...p, frameScale: device === 'ipad' ? 2.4 : 2.0, frameX: 0, frameY: 550, rotation: 0 }));
+      const scale = isTablet ? 2.4 : isFold ? 2.3 : 2.05;
+      const y = isTablet ? 550 : isFold ? 480 : 580;
+      setDeviceState(p => ({ ...p, frameScale: scale, frameX: 0, frameY: y, rotation: 0 }));
+      setText(p => ({ ...p, align: 'center', offsetY: 14 }));
     } else if (presetType === 'slanted') {
-      setDeviceState(p => ({ ...p, frameScale: device === 'ipad' ? 2.1 : 1.8, frameX: 0, frameY: 300, rotation: -12 }));
+      const scale = isTablet ? 2.1 : isFold ? 2.0 : 1.8;
+      const y = isTablet ? 320 : isFold ? 280 : 360;
+      setDeviceState(p => ({ ...p, frameScale: scale, frameX: 0, frameY: y, rotation: -12 }));
+      setText(p => ({ ...p, align: 'center', offsetY: 12 }));
     } else if (presetType === 'fullFit') {
-      setDeviceState(p => ({ ...p, frameScale: device === 'ipad' ? 2.6 : 2.2, frameX: 0, frameY: 250, rotation: 0 }));
+      const scale = isTablet ? 2.6 : isFold ? 2.4 : 2.2;
+      const y = isTablet ? 250 : isFold ? 200 : 260;
+      setDeviceState(p => ({ ...p, frameScale: scale, frameX: 0, frameY: y, rotation: 0 }));
+      setText(p => ({ ...p, align: 'center', offsetY: 10 }));
     }
   };
 
@@ -147,12 +237,15 @@ export default function App() {
 
   // Auto-fit zoom reset
   const fitZoomToScreen = () => {
-    const availableHeight = window.innerHeight - 100;
-    const calculatedScale = availableHeight / canvasHeight;
-    setViewportZoom(Math.min(Math.max(calculatedScale, 0.1), 1.0));
+    const availableHeight = window.innerHeight - 110;
+    const availableWidth = window.innerWidth - 420;
+    const scaleH = availableHeight / canvasHeight;
+    const scaleW = availableWidth / canvasWidth;
+    const calculatedScale = Math.min(scaleH, scaleW);
+    setViewportZoom(Math.min(Math.max(calculatedScale, 0.08), 1.0));
   };
 
-  // Export Screenshot
+  // Export High-Res Screenshot
   const handleExport = async () => {
     if (!canvasRef.current) return;
     setIsExporting(true);
@@ -173,7 +266,7 @@ export default function App() {
       exportHost.appendChild(cloneNode);
 
       document.body.appendChild(exportHost);
-      await new Promise(r => setTimeout(r, 120));
+      await new Promise(r => setTimeout(r, 150));
 
       const dataUrl = await toPng(cloneNode, {
         quality: 1,
@@ -182,8 +275,9 @@ export default function App() {
         height: canvasHeight
       });
 
+      const storePrefix = currentStore === STORES.PLAY_STORE ? 'google-play' : 'apple-app-store';
       const link = document.createElement('a');
-      link.download = `${device}-${currentDeviceState.orientation}-app-store.png`;
+      link.download = `${storePrefix}-${currentDeviceId}-${activeDeviceState.orientation}-${canvasWidth}x${canvasHeight}.png`;
       link.href = dataUrl;
       link.click();
     } catch (err) {
@@ -192,10 +286,11 @@ export default function App() {
       try {
         const dataUrl = await toPng(canvasRef.current, { quality: 1, pixelRatio: 1 });
         const link = document.createElement('a');
-        link.download = `${device}-app-store.png`;
+        link.download = `${currentDeviceId}-screenshot.png`;
         link.href = dataUrl;
         link.click();
-      } catch (e) {
+      } catch (fallbackErr) {
+        console.error('Fallback export error:', fallbackErr);
         alert('Export failed.');
       }
     } finally {
@@ -207,15 +302,19 @@ export default function App() {
   };
 
   const state = {
-    device,
-    switchDeviceMode,
+    currentStore,
+    setStore,
+    currentDeviceId,
+    switchDevice,
+    currentDeviceConfig,
     canvasWidth,
     canvasHeight,
     bgState,
     setBgState,
-    deviceState: currentDeviceState,
+    deviceState: activeDeviceState,
     setDeviceState,
-    text, setText,
+    text,
+    setText,
     availableFonts,
     registerCustomFont,
     applyPreset
@@ -231,15 +330,18 @@ export default function App() {
         {/* Top Header Toolbar */}
         <div className="top-header">
           <div className="app-branding">
-            <span className="app-title">AppStore Studio Pro</span>
+            <div className="store-pill-indicator">
+              {currentStore === STORES.PLAY_STORE ? '🤖 Google Play Store' : '🍎 Apple App Store'}
+            </div>
+            <span className="app-title">{currentDeviceConfig.name}</span>
             <span className="badge">
-              {device === 'iphone' ? 'iPhone 6.7" (1284x2778)' : 'iPad 12.9" (2048x2732)'}
+              {canvasWidth} × {canvasHeight} px
             </span>
           </div>
 
           {/* Zoom Controls */}
           <div className="zoom-controls">
-            <button className="icon-btn" onClick={() => setViewportZoom(z => Math.max(z - 0.05, 0.1))} title="Zoom Out"><ZoomOut size={16} /></button>
+            <button className="icon-btn" onClick={() => setViewportZoom(z => Math.max(z - 0.05, 0.05))} title="Zoom Out"><ZoomOut size={16} /></button>
             <span className="zoom-val">{Math.round(viewportZoom * 100)}%</span>
             <button className="icon-btn" onClick={() => setViewportZoom(z => Math.min(z + 0.05, 1.0))} title="Zoom In"><ZoomIn size={16} /></button>
             <button className="icon-btn" onClick={fitZoomToScreen} title="Fit Screen"><Maximize2 size={14} /></button>
@@ -264,7 +366,7 @@ export default function App() {
             disabled={isExporting}
           >
             <Download size={18} />
-            {isExporting ? 'Generating PNG...' : 'Export High-Res PNG'}
+            {isExporting ? 'Generating PNG...' : `Export ${canvasWidth}×${canvasHeight}`}
           </button>
         </div>
 

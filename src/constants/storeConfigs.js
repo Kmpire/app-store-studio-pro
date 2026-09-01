@@ -1,0 +1,205 @@
+export const STORES = {
+  APP_STORE: 'app-store',
+  PLAY_STORE: 'play-store'
+};
+
+export const DEVICE_CONFIGS = {
+  // Apple App Store Devices
+  'iphone-6-7': {
+    id: 'iphone-6-7',
+    store: STORES.APP_STORE,
+    name: 'iPhone 6.7" Display',
+    badge: '1284 x 2778',
+    width: 1284,
+    height: 2778,
+    type: 'iphone',
+    aspectRatio: '9:19.5',
+    baseWidth: 460,
+    baseHeight: 950,
+    borderRadius: '52px',
+    innerBorderRadius: '38px',
+    padding: '18px',
+    cameraStyle: 'dynamic-island',
+    defaultScale: 1.85,
+    defaultY: 350
+  },
+  'iphone-6-5': {
+    id: 'iphone-6-5',
+    store: STORES.APP_STORE,
+    name: 'iPhone 6.5" Display',
+    badge: '1242 x 2688',
+    width: 1242,
+    height: 2688,
+    type: 'iphone',
+    aspectRatio: '9:19.5',
+    baseWidth: 455,
+    baseHeight: 940,
+    borderRadius: '50px',
+    innerBorderRadius: '36px',
+    padding: '18px',
+    cameraStyle: 'notch',
+    defaultScale: 1.8,
+    defaultY: 340
+  },
+  'ipad-12-9': {
+    id: 'ipad-12-9',
+    store: STORES.APP_STORE,
+    name: 'iPad Pro 12.9"',
+    badge: '2048 x 2732',
+    width: 2048,
+    height: 2732,
+    type: 'ipad',
+    aspectRatio: '3:4',
+    baseWidth: 680,
+    baseHeight: 920,
+    borderRadius: '36px',
+    innerBorderRadius: '20px',
+    padding: '22px',
+    cameraStyle: 'ipad-sensor',
+    defaultScale: 2.1,
+    defaultY: 300
+  },
+
+  // Google Play Store Devices & Formats
+  'android-phone': {
+    id: 'android-phone',
+    store: STORES.PLAY_STORE,
+    name: 'Android Phone (20:9 Flagship)',
+    badge: '1080 x 2400',
+    width: 1080,
+    height: 2400,
+    type: 'android-phone',
+    aspectRatio: '9:20',
+    baseWidth: 450,
+    baseHeight: 980,
+    borderRadius: '46px',
+    innerBorderRadius: '32px',
+    padding: '16px',
+    cameraStyle: 'punch-hole-center',
+    defaultScale: 1.75,
+    defaultY: 320
+  },
+  'android-phone-16-9': {
+    id: 'android-phone-16-9',
+    store: STORES.PLAY_STORE,
+    name: 'Android Phone (16:9 Standard)',
+    badge: '1080 x 1920',
+    width: 1080,
+    height: 1920,
+    type: 'android-phone',
+    aspectRatio: '9:16',
+    baseWidth: 460,
+    baseHeight: 820,
+    borderRadius: '42px',
+    innerBorderRadius: '28px',
+    padding: '16px',
+    cameraStyle: 'punch-hole-center',
+    defaultScale: 1.6,
+    defaultY: 260
+  },
+  'android-tablet-7': {
+    id: 'android-tablet-7',
+    store: STORES.PLAY_STORE,
+    name: '7" Android Tablet',
+    badge: '1200 x 1920',
+    width: 1200,
+    height: 1920,
+    type: 'android-tablet',
+    aspectRatio: '10:16',
+    baseWidth: 560,
+    baseHeight: 880,
+    borderRadius: '30px',
+    innerBorderRadius: '18px',
+    padding: '20px',
+    cameraStyle: 'tablet-sensor',
+    defaultScale: 1.65,
+    defaultY: 240
+  },
+  'android-tablet-10': {
+    id: 'android-tablet-10',
+    store: STORES.PLAY_STORE,
+    name: '10" Android Tablet',
+    badge: '1600 x 2560',
+    width: 1600,
+    height: 2560,
+    type: 'android-tablet',
+    aspectRatio: '10:16',
+    baseWidth: 640,
+    baseHeight: 960,
+    borderRadius: '34px',
+    innerBorderRadius: '20px',
+    padding: '22px',
+    cameraStyle: 'tablet-sensor',
+    defaultScale: 1.95,
+    defaultY: 280
+  },
+  'android-foldable': {
+    id: 'android-foldable',
+    store: STORES.PLAY_STORE,
+    name: 'Foldable Device (Unfolded)',
+    badge: '2176 x 1812',
+    width: 2176,
+    height: 1812,
+    type: 'android-foldable',
+    aspectRatio: '6:5',
+    baseWidth: 720,
+    baseHeight: 600,
+    borderRadius: '32px',
+    innerBorderRadius: '20px',
+    padding: '20px',
+    cameraStyle: 'punch-hole-right',
+    defaultScale: 2.1,
+    defaultY: 200
+  },
+  'play-feature-graphic': {
+    id: 'play-feature-graphic',
+    store: STORES.PLAY_STORE,
+    name: 'Play Store Feature Graphic',
+    badge: '1024 x 500 Banner',
+    width: 1024,
+    height: 500,
+    type: 'feature-graphic',
+    aspectRatio: '1024:500',
+    baseWidth: 320,
+    baseHeight: 680,
+    borderRadius: '36px',
+    innerBorderRadius: '24px',
+    padding: '12px',
+    cameraStyle: 'punch-hole-center',
+    defaultScale: 0.95,
+    defaultY: 70
+  }
+};
+
+export const FRAME_FINISHES = [
+  { id: 'titanium-dark', name: 'Titanium Dark', color: '#1e2029', border: '#3b3d4d', metallic: 'linear-gradient(145deg, #2d2f3c, #111218)' },
+  { id: 'phantom-black', name: 'Phantom Black', color: '#090a0f', border: '#1f2029', metallic: 'linear-gradient(145deg, #1c1d24, #050508)' },
+  { id: 'titanium-silver', name: 'Titanium Silver', color: '#8e939d', border: '#b8bcc6', metallic: 'linear-gradient(145deg, #d8dbe2, #848894)' },
+  { id: 'ceramic-white', name: 'Ceramic White', color: '#e5e7eb', border: '#f3f4f6', metallic: 'linear-gradient(145deg, #ffffff, #cfd3dc)' },
+  { id: 'deep-blue', name: 'Midnight Navy', color: '#141e33', border: '#25355a', metallic: 'linear-gradient(145deg, #1e2e4f, #0a101f)' },
+  { id: 'forest-emerald', name: 'Emerald Forest', color: '#0f291e', border: '#1d4d38', metallic: 'linear-gradient(145deg, #173d2d, #071710)' },
+  { id: 'custom', name: 'Custom Color', color: '#2d2d32', border: '#444450', metallic: null }
+];
+
+export const CAMERA_STYLES = [
+  { id: 'punch-hole-center', name: 'Centered Punch Hole' },
+  { id: 'punch-hole-left', name: 'Left Punch Hole' },
+  { id: 'punch-hole-right', name: 'Right Punch Hole' },
+  { id: 'pill-camera', name: 'Pill Camera' },
+  { id: 'dynamic-island', name: 'Dynamic Island' },
+  { id: 'notch', name: 'Classic Notch' },
+  { id: 'hidden', name: 'Hidden / Clean' }
+];
+
+export const STORE_GRADIENT_PRESETS = [
+  { name: 'Google Modern', color1: '#0f172a', color2: '#0284c7', angle: 135 },
+  { name: 'Android Cyber', color1: '#064e3b', color2: '#022c22', angle: 160 },
+  { name: 'Deep Indigo', color1: '#1e1b4b', color2: '#4338ca', angle: 135 },
+  { name: 'Vibrant Sunset', color1: '#7c2d12', color2: '#db2777', angle: 145 },
+  { name: 'Dark Onyx', color1: '#18181b', color2: '#09090b', angle: 180 },
+  { name: 'Midnight Violet', color1: '#2e1065', color2: '#0f172a', angle: 135 },
+  { name: 'Neon Emerald', color1: '#022c22', color2: '#10b981', angle: 120 },
+  { name: 'Oceanic Blue', color1: '#082f49', color2: '#06b6d4', angle: 135 },
+  { name: 'Play Store Pure', color1: '#047857', color2: '#0284c7', angle: 135 },
+  { name: 'Royal Crimson', color1: '#4c0519', color2: '#be123c', angle: 140 }
+];
