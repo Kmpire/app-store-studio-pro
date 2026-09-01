@@ -1,6 +1,17 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Upload, Smartphone, Tablet, Palette, Type, Sliders, RotateCcw, Sparkles, Maximize, Crop, FileUp } from 'lucide-react';
+import { 
+  Upload, 
+  Palette, 
+  Type, 
+  Sliders, 
+  RotateCcw, 
+  Sparkles, 
+  Maximize, 
+  Crop, 
+  FileUp
+} from 'lucide-react';
 import { HexColorPicker } from 'react-colorful';
+import { STORES, DEVICE_CONFIGS, FRAME_FINISHES, CAMERA_STYLES, STORE_GRADIENT_PRESETS } from '../constants/storeConfigs';
 
 const ColorPickerPopover = ({ label, color, onChange }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -56,6 +67,23 @@ const ColorPickerPopover = ({ label, color, onChange }) => {
 export default function Sidebar({ state }) {
   const [activeTab, setActiveTab] = useState('device');
 
+  const {
+    currentStore,
+    setStore,
+    currentDeviceId,
+    switchDevice,
+    currentDeviceConfig,
+    deviceState,
+    setDeviceState,
+    bgState,
+    setBgState,
+    text,
+    setText,
+    availableFonts,
+    registerCustomFont,
+    applyPreset
+  } = state;
+
   const handleFileUpload = (e, callback) => {
     const file = e.target.files[0];
     if (file) {
@@ -68,9 +96,16 @@ export default function Sidebar({ state }) {
   const handleFontUpload = (e) => {
     const file = e.target.files[0];
     if (file) {
-      state.registerCustomFont(file);
+      registerCustomFont(file);
     }
   };
+
+  const currentStoreDevices = Object.values(DEVICE_CONFIGS).filter(
+    d => d.store === currentStore
+  );
+
+  const isPlayStore = currentStore === STORES.PLAY_STORE;
+  const isFeatureGraphic = currentDeviceId === 'play-feature-graphic';
 
   const colorSwatches = [
     '#0f172a', '#1e1b4b', '#311b92', '#0284c7', '#059669', 
@@ -79,25 +114,49 @@ export default function Sidebar({ state }) {
 
   return (
     <div className="sidebar-container">
-      {/* Device Mode Switcher */}
-      <div className="device-switcher">
-        <button 
-          className={`device-btn ${state.device === 'iphone' ? 'active' : ''}`}
-          onClick={() => state.switchDeviceMode('iphone')}
+      {/* 1. TOP STORE SWITCHER */}
+      <div className="store-switcher-bar">
+        <button
+          className={`store-tab-btn ${currentStore === STORES.APP_STORE ? 'active apple' : ''}`}
+          onClick={() => setStore(STORES.APP_STORE)}
         >
-          <Smartphone size={18} />
-          iPhone App Store
+          <span className="store-icon">🍎</span>
+          <div className="store-tab-info">
+            <span className="store-title">Apple App Store</span>
+            <span className="store-sub">iOS & iPadOS</span>
+          </div>
         </button>
-        <button 
-          className={`device-btn ${state.device === 'ipad' ? 'active' : ''}`}
-          onClick={() => state.switchDeviceMode('ipad')}
+
+        <button
+          className={`store-tab-btn ${currentStore === STORES.PLAY_STORE ? 'active google' : ''}`}
+          onClick={() => setStore(STORES.PLAY_STORE)}
         >
-          <Tablet size={18} />
-          iPad App Store
+          <span className="store-icon">🤖</span>
+          <div className="store-tab-info">
+            <span className="store-title">Google Play Store</span>
+            <span className="store-sub">Android & Tablets</span>
+          </div>
         </button>
       </div>
 
-      {/* Tabs */}
+      {/* 2. DEVICE / FORMAT SELECTOR */}
+      <div className="device-selection-area">
+        <label className="label-sm mb-1">Select Store Format & Device</label>
+        <div className="device-pills-scroll">
+          {currentStoreDevices.map(d => (
+            <button
+              key={d.id}
+              className={`device-pill-btn ${currentDeviceId === d.id ? 'active' : ''}`}
+              onClick={() => switchDevice(d.id)}
+            >
+              <span className="pill-name">{d.name}</span>
+              <span className="pill-badge">{d.badge}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* 3. NAVIGATION TABS */}
       <div className="nav-tabs">
         <button className={`nav-tab ${activeTab === 'device' ? 'active' : ''}`} onClick={() => setActiveTab('device')}>
           <Sliders size={16} /> Device & Screen
@@ -112,14 +171,21 @@ export default function Sidebar({ state }) {
 
       <div className="tab-content">
 
-        {/* TAB 1: DEVICE & SCREENSHOT */}
+        {/* ========================================================================= */}
+        {/* TAB 1: DEVICE & SCREENSHOT CONTROLS */}
+        {/* ========================================================================= */}
         {activeTab === 'device' && (
           <div className="section-group">
+            {/* Screenshot Upload */}
             <h3 className="section-title">App Screenshot</h3>
             <label className="upload-box">
               <Upload size={20} />
-              <span>{state.deviceState.screenshot ? 'Change Screenshot' : `Upload ${state.device === 'ipad' ? 'iPad' : 'iPhone'} Screenshot`}</span>
-              <input type="file" accept="image/*" onChange={(e) => handleFileUpload(e, (url) => state.setDeviceState(p => ({ ...p, screenshot: url })))} />
+              <span>{deviceState.screenshot ? 'Change Screenshot' : `Upload ${currentDeviceConfig?.name || 'Device'} Screenshot`}</span>
+              <input 
+                type="file" 
+                accept="image/*" 
+                onChange={(e) => handleFileUpload(e, (url) => setDeviceState(p => ({ ...p, screenshot: url })))} 
+              />
             </label>
 
             {/* Quick Layout Presets */}
@@ -128,35 +194,125 @@ export default function Sidebar({ state }) {
               Instant Layout Presets
             </h3>
             <div className="preset-grid">
-              <button className="preset-btn" onClick={() => state.applyPreset('centered')}>
-                🌟 Centered Hero
-              </button>
-              <button className="preset-btn" onClick={() => state.applyPreset('bottomPeek')}>
-                📱 Bottom Peek
-              </button>
-              <button className="preset-btn" onClick={() => state.applyPreset('slanted')}>
-                📐 Slanted 3D
-              </button>
-              <button className="preset-btn" onClick={() => state.applyPreset('fullFit')}>
-                ↔️ Full Fill
-              </button>
+              {isFeatureGraphic ? (
+                <>
+                  <button className="preset-btn" onClick={() => applyPreset('bannerRight')}>
+                    📐 Right Mockup Banner
+                  </button>
+                  <button className="preset-btn" onClick={() => applyPreset('bannerCenter')}>
+                    🌟 Centered Showcase
+                  </button>
+                  <button className="preset-btn" onClick={() => applyPreset('bannerSlanted')}>
+                    🚀 3D Angled Hero
+                  </button>
+                  <button className="preset-btn" onClick={() => applyPreset('bannerTextOnly')}>
+                    📝 Clean Graphic Title
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button className="preset-btn" onClick={() => applyPreset('centered')}>
+                    🌟 Centered Hero
+                  </button>
+                  <button className="preset-btn" onClick={() => applyPreset('bottomPeek')}>
+                    📱 Bottom Peek
+                  </button>
+                  <button className="preset-btn" onClick={() => applyPreset('slanted')}>
+                    📐 Slanted 3D
+                  </button>
+                  <button className="preset-btn" onClick={() => applyPreset('fullFit')}>
+                    ↔️ Full Fill
+                  </button>
+                </>
+              )}
+            </div>
+
+            {/* Device Chassis Finish & Colors */}
+            <h3 className="section-title mt-6">Device Chassis & Finish</h3>
+            <div className="controls-box">
+              <span className="label-sm mb-2">Frame Material Finish</span>
+              <div className="finish-grid">
+                {FRAME_FINISHES.map(f => (
+                  <button
+                    key={f.id}
+                    className={`finish-card ${deviceState.frameFinishId === f.id ? 'active' : ''}`}
+                    onClick={() => setDeviceState(p => ({ ...p, frameFinishId: f.id }))}
+                  >
+                    <div 
+                      className="finish-swatch"
+                      style={{ background: f.metallic || f.color, border: `1px solid ${f.border}` }}
+                    />
+                    <span className="finish-label">{f.name}</span>
+                  </button>
+                ))}
+              </div>
+
+              {deviceState.frameFinishId === 'custom' && (
+                <div className="mt-3 pt-3" style={{ borderTop: '1px solid var(--border-light)' }}>
+                  <ColorPickerPopover 
+                    label="Custom Frame Color" 
+                    color={deviceState.customFrameColor || '#2d2d32'} 
+                    onChange={(c) => setDeviceState(p => ({ ...p, customFrameColor: c }))} 
+                  />
+                </div>
+              )}
+
+              {/* Android Notch / Punch-hole Selection */}
+              {isPlayStore && !isFeatureGraphic && (
+                <div className="control-row mt-4">
+                  <span className="label">Punch-Hole Camera</span>
+                  <select
+                    className="select-input"
+                    style={{ width: '180px' }}
+                    value={deviceState.cameraStyleOverride || currentDeviceConfig?.cameraStyle || 'punch-hole-center'}
+                    onChange={(e) => setDeviceState(p => ({ ...p, cameraStyleOverride: e.target.value }))}
+                  >
+                    {CAMERA_STYLES.map(c => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Glass Glare Reflection Toggle */}
+              <div className="control-row mt-3">
+                <span className="label">Glass Specular Glare</span>
+                <button
+                  className={`align-btn ${deviceState.showGlare ? 'active' : ''}`}
+                  onClick={() => setDeviceState(p => ({ ...p, showGlare: !p.showGlare }))}
+                >
+                  {deviceState.showGlare ? 'Enabled' : 'Disabled'}
+                </button>
+              </div>
+
+              {/* Shadow Intensity */}
+              <div className="control-row mt-3">
+                <span className="label">Drop Shadow Intensity</span>
+                <span className="value">{Math.round((deviceState.shadowIntensity ?? 0.5) * 100)}%</span>
+              </div>
+              <input 
+                type="range" min="0" max="1" step="0.05"
+                value={deviceState.shadowIntensity ?? 0.5}
+                onChange={(e) => setDeviceState(p => ({ ...p, shadowIntensity: parseFloat(e.target.value) }))}
+                className="range-input"
+              />
             </div>
 
             {/* Device Orientation & Rotation */}
-            <h3 className="section-title mt-6">Device Orientation & Rotation</h3>
+            <h3 className="section-title mt-6">Orientation & Rotation</h3>
             <div className="controls-box">
               <div className="control-row mb-3">
                 <span className="label">Orientation</span>
                 <div className="align-buttons">
                   <button 
-                    className={`align-btn ${state.deviceState.orientation === 'portrait' ? 'active' : ''}`}
-                    onClick={() => state.setDeviceState(p => ({ ...p, orientation: 'portrait' }))}
+                    className={`align-btn ${deviceState.orientation === 'portrait' ? 'active' : ''}`}
+                    onClick={() => setDeviceState(p => ({ ...p, orientation: 'portrait' }))}
                   >
                     Portrait
                   </button>
                   <button 
-                    className={`align-btn ${state.deviceState.orientation === 'landscape' ? 'active' : ''}`}
-                    onClick={() => state.setDeviceState(p => ({ ...p, orientation: 'landscape' }))}
+                    className={`align-btn ${deviceState.orientation === 'landscape' ? 'active' : ''}`}
+                    onClick={() => setDeviceState(p => ({ ...p, orientation: 'landscape' }))}
                   >
                     Landscape
                   </button>
@@ -165,12 +321,12 @@ export default function Sidebar({ state }) {
 
               <div className="control-row mt-3">
                 <span className="label">Rotation Angle</span>
-                <span className="value">{state.deviceState.rotation || 0}°</span>
+                <span className="value">{deviceState.rotation || 0}°</span>
               </div>
               <input 
                 type="range" min="-180" max="180" step="1"
-                value={state.deviceState.rotation || 0}
-                onChange={(e) => state.setDeviceState(p => ({ ...p, rotation: parseInt(e.target.value) }))}
+                value={deviceState.rotation || 0}
+                onChange={(e) => setDeviceState(p => ({ ...p, rotation: parseInt(e.target.value) }))}
                 className="range-input"
               />
 
@@ -179,7 +335,7 @@ export default function Sidebar({ state }) {
                   <button
                     key={deg}
                     className="pill-tag-btn"
-                    onClick={() => state.setDeviceState(p => ({ ...p, rotation: deg }))}
+                    onClick={() => setDeviceState(p => ({ ...p, rotation: deg }))}
                   >
                     {deg > 0 ? `+${deg}°` : `${deg}°`}
                   </button>
@@ -187,22 +343,23 @@ export default function Sidebar({ state }) {
               </div>
             </div>
 
-            {state.deviceState.screenshot && (
+            {/* Screenshot Mask & Inner Fit */}
+            {deviceState.screenshot && (
               <>
-                <h3 className="section-title mt-6">Screenshot Mask & Fit</h3>
+                <h3 className="section-title mt-6">Screenshot Mask & Inner Fit</h3>
                 <div className="controls-box">
                   <div className="control-row mb-3">
                     <span className="label">Mask Fill Mode</span>
                     <div className="align-buttons">
                       <button 
-                        className={`align-btn ${state.deviceState.fitMode === 'cover' ? 'active' : ''}`}
-                        onClick={() => state.setDeviceState(p => ({ ...p, fitMode: 'cover', innerX: 0, innerY: 0, innerZoom: 1 }))}
+                        className={`align-btn ${deviceState.fitMode === 'cover' ? 'active' : ''}`}
+                        onClick={() => setDeviceState(p => ({ ...p, fitMode: 'cover', innerX: 0, innerY: 0, innerZoom: 1 }))}
                       >
                         <Maximize size={12} style={{ marginRight: 4 }} /> Edge-to-Edge
                       </button>
                       <button 
-                        className={`align-btn ${state.deviceState.fitMode === 'contain' ? 'active' : ''}`}
-                        onClick={() => state.setDeviceState(p => ({ ...p, fitMode: 'contain' }))}
+                        className={`align-btn ${deviceState.fitMode === 'contain' ? 'active' : ''}`}
+                        onClick={() => setDeviceState(p => ({ ...p, fitMode: 'contain' }))}
                       >
                         <Crop size={12} style={{ marginRight: 4 }} /> Contain
                       </button>
@@ -211,108 +368,136 @@ export default function Sidebar({ state }) {
 
                   <div className="control-row mt-3">
                     <span className="label">Screenshot Zoom</span>
-                    <span className="value">{Math.round(state.deviceState.innerZoom * 100)}%</span>
+                    <span className="value">{Math.round((deviceState.innerZoom || 1) * 100)}%</span>
                   </div>
                   <input 
                     type="range" min="0.5" max="3" step="0.05"
-                    value={state.deviceState.innerZoom}
-                    onChange={(e) => state.setDeviceState(p => ({ ...p, innerZoom: parseFloat(e.target.value) }))}
+                    value={deviceState.innerZoom || 1}
+                    onChange={(e) => setDeviceState(p => ({ ...p, innerZoom: parseFloat(e.target.value) }))}
                     className="range-input"
                   />
 
                   <div className="control-row mt-3">
-                    <span className="label">Horizontal Position (X)</span>
-                    <span className="value">{state.deviceState.innerX}px</span>
+                    <span className="label">Screenshot Pan (X)</span>
+                    <span className="value">{deviceState.innerX || 0}px</span>
                   </div>
                   <input 
                     type="range" min="-500" max="500" step="2"
-                    value={state.deviceState.innerX}
-                    onChange={(e) => state.setDeviceState(p => ({ ...p, innerX: parseInt(e.target.value) }))}
+                    value={deviceState.innerX || 0}
+                    onChange={(e) => setDeviceState(p => ({ ...p, innerX: parseInt(e.target.value) }))}
                     className="range-input"
                   />
 
                   <div className="control-row mt-3">
-                    <span className="label">Vertical Position (Y)</span>
-                    <span className="value">{state.deviceState.innerY}px</span>
+                    <span className="label">Screenshot Pan (Y)</span>
+                    <span className="value">{deviceState.innerY || 0}px</span>
                   </div>
                   <input 
                     type="range" min="-600" max="600" step="2"
-                    value={state.deviceState.innerY}
-                    onChange={(e) => state.setDeviceState(p => ({ ...p, innerY: parseInt(e.target.value) }))}
+                    value={deviceState.innerY || 0}
+                    onChange={(e) => setDeviceState(p => ({ ...p, innerY: parseInt(e.target.value) }))}
                     className="range-input"
                   />
 
                   <button 
                     className="reset-btn"
-                    onClick={() => state.setDeviceState(p => ({ ...p, fitMode: 'cover', innerZoom: 1, innerX: 0, innerY: 0 }))}
+                    onClick={() => setDeviceState(p => ({ ...p, fitMode: 'cover', innerZoom: 1, innerX: 0, innerY: 0 }))}
                   >
-                    <RotateCcw size={14} /> Reset Edge-to-Edge
+                    <RotateCcw size={14} /> Reset Inner Fit
                   </button>
                 </div>
               </>
             )}
 
-            <h3 className="section-title mt-6">Device Scale & Placement on Canvas</h3>
+            {/* Device Canvas Scale & Placement */}
+            <h3 className="section-title mt-6">Device Scale & Canvas Position</h3>
             <div className="controls-box">
               <div className="control-row">
                 <span className="label">Device Scale</span>
-                <span className="value">{Math.round(state.deviceState.frameScale * 100)}%</span>
+                <span className="value">{Math.round((deviceState.frameScale || 1) * 100)}%</span>
               </div>
               <input 
-                type="range" min="0.5" max="3.5" step="0.05"
-                value={state.deviceState.frameScale}
-                onChange={(e) => state.setDeviceState(p => ({ ...p, frameScale: parseFloat(e.target.value) }))}
+                type="range" min="0.3" max="3.5" step="0.05"
+                value={deviceState.frameScale || 1}
+                onChange={(e) => setDeviceState(p => ({ ...p, frameScale: parseFloat(e.target.value) }))}
                 className="range-input"
               />
 
               <div className="control-row mt-3">
                 <span className="label">Vertical Position (Y)</span>
-                <span className="value">{state.deviceState.frameY}px</span>
+                <span className="value">{deviceState.frameY || 0}px</span>
               </div>
               <input 
                 type="range" min="-1200" max="1200" step="5"
-                value={state.deviceState.frameY}
-                onChange={(e) => state.setDeviceState(p => ({ ...p, frameY: parseInt(e.target.value) }))}
+                value={deviceState.frameY || 0}
+                onChange={(e) => setDeviceState(p => ({ ...p, frameY: parseInt(e.target.value) }))}
                 className="range-input"
               />
 
               <div className="control-row mt-3">
                 <span className="label">Horizontal Position (X)</span>
-                <span className="value">{state.deviceState.frameX}px</span>
+                <span className="value">{deviceState.frameX || 0}px</span>
               </div>
               <input 
                 type="range" min="-800" max="800" step="5"
-                value={state.deviceState.frameX}
-                onChange={(e) => state.setDeviceState(p => ({ ...p, frameX: parseInt(e.target.value) }))}
+                value={deviceState.frameX || 0}
+                onChange={(e) => setDeviceState(p => ({ ...p, frameX: parseInt(e.target.value) }))}
                 className="range-input"
               />
             </div>
           </div>
         )}
 
-        {/* TAB 2: BACKGROUND */}
+        {/* ========================================================================= */}
+        {/* TAB 2: BACKGROUND CONTROLS */}
+        {/* ========================================================================= */}
         {activeTab === 'bg' && (
           <div className="section-group">
             <h3 className="section-title">Background Type</h3>
             <div className="bg-type-selector">
-              {['color', 'gradient', 'image'].map((t) => (
+              {['gradient', 'color', 'image'].map((t) => (
                 <button 
                   key={t}
-                  className={`type-btn ${state.bgState.type === t ? 'active' : ''}`}
-                  onClick={() => state.setBgState(p => ({ ...p, type: t }))}
+                  className={`type-btn ${bgState.type === t ? 'active' : ''}`}
+                  onClick={() => setBgState(p => ({ ...p, type: t }))}
                 >
                   {t}
                 </button>
               ))}
             </div>
 
+            {/* Curated Store Gradient Presets */}
+            {bgState.type === 'gradient' && (
+              <>
+                <span className="label-sm mt-4">Curated Gradient Presets</span>
+                <div className="gradient-presets-grid mt-2">
+                  {STORE_GRADIENT_PRESETS.map((preset) => (
+                    <button
+                      key={preset.name}
+                      className="gradient-preset-chip"
+                      style={{ background: `linear-gradient(135deg, ${preset.color1}, ${preset.color2})` }}
+                      onClick={() => setBgState(p => ({
+                        ...p,
+                        color1: preset.color1,
+                        color2: preset.color2,
+                        gradientAngle: preset.angle || 135
+                      }))}
+                      title={preset.name}
+                    >
+                      <span>{preset.name}</span>
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+
             {/* SOLID COLOR MODE */}
-            {state.bgState.type === 'color' && (
+            {bgState.type === 'color' && (
               <div className="controls-box mt-4">
                 <ColorPickerPopover 
                   label="Special Background Color" 
-                  color={state.bgState.color} 
-                  onChange={(c) => state.setBgState(p => ({ ...p, color: c }))} 
+                  color={bgState.color} 
+                  onChange={(c) => setBgState(p => ({ ...p, color: c }))} 
                 />
 
                 <span className="label-sm mt-4">Quick Palette Swatches</span>
@@ -322,7 +507,7 @@ export default function Sidebar({ state }) {
                       key={hex} 
                       className="swatch-item" 
                       style={{ backgroundColor: hex }}
-                      onClick={() => state.setBgState(p => ({ ...p, color: hex }))}
+                      onClick={() => setBgState(p => ({ ...p, color: hex }))}
                     />
                   ))}
                 </div>
@@ -330,18 +515,18 @@ export default function Sidebar({ state }) {
             )}
 
             {/* GRADIENT MODE */}
-            {state.bgState.type === 'gradient' && (
+            {bgState.type === 'gradient' && (
               <div className="controls-box mt-4">
                 <div className="row-2">
                   <ColorPickerPopover 
                     label="Color 1" 
-                    color={state.bgState.color1} 
-                    onChange={(c) => state.setBgState(p => ({ ...p, color1: c }))} 
+                    color={bgState.color1} 
+                    onChange={(c) => setBgState(p => ({ ...p, color1: c }))} 
                   />
                   <ColorPickerPopover 
                     label="Color 2" 
-                    color={state.bgState.color2} 
-                    onChange={(c) => state.setBgState(p => ({ ...p, color2: c }))} 
+                    color={bgState.color2} 
+                    onChange={(c) => setBgState(p => ({ ...p, color2: c }))} 
                   />
                 </div>
 
@@ -349,30 +534,30 @@ export default function Sidebar({ state }) {
                   <span className="label">Gradient Style</span>
                   <div className="align-buttons">
                     <button 
-                      className={`align-btn ${state.bgState.gradientType === 'linear' ? 'active' : ''}`}
-                      onClick={() => state.setBgState(p => ({ ...p, gradientType: 'linear' }))}
+                      className={`align-btn ${bgState.gradientType === 'linear' ? 'active' : ''}`}
+                      onClick={() => setBgState(p => ({ ...p, gradientType: 'linear' }))}
                     >
                       Linear
                     </button>
                     <button 
-                      className={`align-btn ${state.bgState.gradientType === 'radial' ? 'active' : ''}`}
-                      onClick={() => state.setBgState(p => ({ ...p, gradientType: 'radial' }))}
+                      className={`align-btn ${bgState.gradientType === 'radial' ? 'active' : ''}`}
+                      onClick={() => setBgState(p => ({ ...p, gradientType: 'radial' }))}
                     >
                       Radial
                     </button>
                   </div>
                 </div>
 
-                {state.bgState.gradientType === 'linear' && (
+                {bgState.gradientType === 'linear' && (
                   <>
                     <div className="control-row mt-3">
                       <span className="label">Gradient Angle</span>
-                      <span className="value">{state.bgState.gradientAngle}°</span>
+                      <span className="value">{bgState.gradientAngle}°</span>
                     </div>
                     <input 
                       type="range" min="0" max="360" step="5"
-                      value={state.bgState.gradientAngle}
-                      onChange={(e) => state.setBgState(p => ({ ...p, gradientAngle: parseInt(e.target.value) }))}
+                      value={bgState.gradientAngle}
+                      onChange={(e) => setBgState(p => ({ ...p, gradientAngle: parseInt(e.target.value) }))}
                       className="range-input"
                     />
                   </>
@@ -381,68 +566,68 @@ export default function Sidebar({ state }) {
             )}
 
             {/* IMAGE MODE */}
-            {state.bgState.type === 'image' && (
+            {bgState.type === 'image' && (
               <div className="mt-4">
                 <label className="upload-box">
                   <Upload size={20} />
-                  <span>{state.bgState.image ? 'Change Background Image' : 'Upload Background Image'}</span>
-                  <input type="file" accept="image/*" onChange={(e) => handleFileUpload(e, (url) => state.setBgState(p => ({ ...p, image: url })))} />
+                  <span>{bgState.image ? 'Change Background Image' : 'Upload Background Image'}</span>
+                  <input type="file" accept="image/*" onChange={(e) => handleFileUpload(e, (url) => setBgState(p => ({ ...p, image: url })))} />
                 </label>
 
-                {state.bgState.image && (
+                {bgState.image && (
                   <div className="controls-box mt-4">
                     <div className="control-row">
-                      <span className="label">Image Zoom / Crop</span>
-                      <span className="value">{Math.round(state.bgState.scale * 100)}%</span>
+                      <span className="label">Image Zoom</span>
+                      <span className="value">{Math.round(bgState.scale * 100)}%</span>
                     </div>
                     <input 
                       type="range" min="0.5" max="3" step="0.05"
-                      value={state.bgState.scale}
-                      onChange={(e) => state.setBgState(p => ({ ...p, scale: parseFloat(e.target.value) }))}
+                      value={bgState.scale}
+                      onChange={(e) => setBgState(p => ({ ...p, scale: parseFloat(e.target.value) }))}
                       className="range-input"
                     />
 
                     <div className="control-row mt-3">
                       <span className="label">Horizontal Position (X)</span>
-                      <span className="value">{state.bgState.posX}px</span>
+                      <span className="value">{bgState.posX}px</span>
                     </div>
                     <input 
                       type="range" min="-500" max="500" step="5"
-                      value={state.bgState.posX}
-                      onChange={(e) => state.setBgState(p => ({ ...p, posX: parseInt(e.target.value) }))}
+                      value={bgState.posX}
+                      onChange={(e) => setBgState(p => ({ ...p, posX: parseInt(e.target.value) }))}
                       className="range-input"
                     />
 
                     <div className="control-row mt-3">
                       <span className="label">Vertical Position (Y)</span>
-                      <span className="value">{state.bgState.posY}px</span>
+                      <span className="value">{bgState.posY}px</span>
                     </div>
                     <input 
                       type="range" min="-500" max="500" step="5"
-                      value={state.bgState.posY}
-                      onChange={(e) => state.setBgState(p => ({ ...p, posY: parseInt(e.target.value) }))}
+                      value={bgState.posY}
+                      onChange={(e) => setBgState(p => ({ ...p, posY: parseInt(e.target.value) }))}
                       className="range-input"
                     />
 
                     <div className="control-row mt-3">
                       <span className="label">Background Blur</span>
-                      <span className="value">{state.bgState.blur}px</span>
+                      <span className="value">{bgState.blur}px</span>
                     </div>
                     <input 
                       type="range" min="0" max="40" step="1"
-                      value={state.bgState.blur}
-                      onChange={(e) => state.setBgState(p => ({ ...p, blur: parseInt(e.target.value) }))}
+                      value={bgState.blur}
+                      onChange={(e) => setBgState(p => ({ ...p, blur: parseInt(e.target.value) }))}
                       className="range-input"
                     />
 
                     <div className="control-row mt-3">
                       <span className="label">Dark Overlay Tint</span>
-                      <span className="value">{state.bgState.overlayOpacity}%</span>
+                      <span className="value">{bgState.overlayOpacity}%</span>
                     </div>
                     <input 
                       type="range" min="0" max="90" step="2"
-                      value={state.bgState.overlayOpacity}
-                      onChange={(e) => state.setBgState(p => ({ ...p, overlayOpacity: parseInt(e.target.value) }))}
+                      value={bgState.overlayOpacity}
+                      onChange={(e) => setBgState(p => ({ ...p, overlayOpacity: parseInt(e.target.value) }))}
                       className="range-input"
                     />
                   </div>
@@ -452,76 +637,91 @@ export default function Sidebar({ state }) {
           </div>
         )}
 
-        {/* TAB 3: TEXT & FONTS */}
+        {/* ========================================================================= */}
+        {/* TAB 3: TEXT & FONTS CONTROLS */}
+        {/* ========================================================================= */}
         {activeTab === 'text' && (
           <div className="section-group">
-            <h3 className="section-title">Title Text</h3>
+            {/* Optional Tagline / Badge Text */}
+            <h3 className="section-title">Badge Tagline (Optional)</h3>
+            <input
+              type="text"
+              value={text.badgeText || ''}
+              onChange={(e) => setText(p => ({ ...p, badgeText: e.target.value }))}
+              placeholder="e.g. Featured on Google Play / #1 App"
+              className="num-input mb-3"
+            />
+
+            {/* Title Text */}
+            <h3 className="section-title">Title Headline</h3>
             <textarea 
-              value={state.text.title} 
-              onChange={(e) => state.setText(p => ({ ...p, title: e.target.value }))}
-              placeholder="e.g. Discover New Features"
+              value={text.title} 
+              onChange={(e) => setText(p => ({ ...p, title: e.target.value }))}
+              placeholder="e.g. Experience The Next Gen App"
               className="text-input"
               rows={2}
             />
 
             <div className="row-2 mt-3">
               <div>
-                <span className="label-sm">Title Size</span>
+                <span className="label-sm">Title Font Size</span>
                 <input 
                   type="number" 
-                  value={state.text.titleSize} 
-                  onChange={(e) => state.setText(p => ({ ...p, titleSize: parseInt(e.target.value) || 20 }))}
+                  value={text.titleSize} 
+                  onChange={(e) => setText(p => ({ ...p, titleSize: parseInt(e.target.value) || 20 }))}
                   className="num-input"
                 />
               </div>
               <div>
                 <ColorPickerPopover 
                   label="Title Color" 
-                  color={state.text.titleColor} 
-                  onChange={(c) => state.setText(p => ({ ...p, titleColor: c }))} 
+                  color={text.titleColor} 
+                  onChange={(c) => setText(p => ({ ...p, titleColor: c }))} 
                 />
               </div>
             </div>
 
+            {/* Subtitle Text */}
             <h3 className="section-title mt-6">Subtitle Text</h3>
             <textarea 
-              value={state.text.subtitle} 
-              onChange={(e) => state.setText(p => ({ ...p, subtitle: e.target.value }))}
-              placeholder="e.g. Fast, secure and easy to use."
+              value={text.subtitle} 
+              onChange={(e) => setText(p => ({ ...p, subtitle: e.target.value }))}
+              placeholder="e.g. Fast, secure and designed for your Android devices."
               className="text-input"
               rows={2}
             />
 
             <div className="row-2 mt-3">
               <div>
-                <span className="label-sm">Subtitle Size</span>
+                <span className="label-sm">Subtitle Font Size</span>
                 <input 
                   type="number" 
-                  value={state.text.subtitleSize} 
-                  onChange={(e) => state.setText(p => ({ ...p, subtitleSize: parseInt(e.target.value) || 16 }))}
+                  value={text.subtitleSize} 
+                  onChange={(e) => setText(p => ({ ...p, subtitleSize: parseInt(e.target.value) || 16 }))}
                   className="num-input"
                 />
               </div>
               <div>
                 <ColorPickerPopover 
                   label="Subtitle Color" 
-                  color={state.text.subtitleColor} 
-                  onChange={(c) => state.setText(p => ({ ...p, subtitleColor: c }))} 
+                  color={text.subtitleColor} 
+                  onChange={(c) => setText(p => ({ ...p, subtitleColor: c }))} 
                 />
               </div>
             </div>
 
+            {/* Font & Typography Settings */}
             <h3 className="section-title mt-6">Font & Typography Settings</h3>
             <div className="controls-box">
               <div className="control-row mb-2">
                 <span className="label">Font Family</span>
               </div>
               <select 
-                value={state.text.fontFamily}
-                onChange={(e) => state.setText(p => ({ ...p, fontFamily: e.target.value }))}
+                value={text.fontFamily}
+                onChange={(e) => setText(p => ({ ...p, fontFamily: e.target.value }))}
                 className="select-input"
               >
-                {state.availableFonts.map(f => (
+                {availableFonts.map(f => (
                   <option key={f.value} value={f.value}>{f.name}</option>
                 ))}
               </select>
@@ -535,12 +735,12 @@ export default function Sidebar({ state }) {
 
               <div className="control-row mt-4">
                 <span className="label">Text Position (Y)</span>
-                <span className="value">{state.text.offsetY}%</span>
+                <span className="value">{text.offsetY}%</span>
               </div>
               <input 
-                type="range" min="5" max="90" step="1"
-                value={state.text.offsetY}
-                onChange={(e) => state.setText(p => ({ ...p, offsetY: parseInt(e.target.value) }))}
+                type="range" min="5" max="95" step="1"
+                value={text.offsetY}
+                onChange={(e) => setText(p => ({ ...p, offsetY: parseInt(e.target.value) }))}
                 className="range-input"
               />
 
@@ -550,8 +750,8 @@ export default function Sidebar({ state }) {
                   {['left', 'center', 'right'].map((al) => (
                     <button 
                       key={al}
-                      className={`align-btn ${state.text.align === al ? 'active' : ''}`}
-                      onClick={() => state.setText(p => ({ ...p, align: al }))}
+                      className={`align-btn ${text.align === al ? 'active' : ''}`}
+                      onClick={() => setText(p => ({ ...p, align: al }))}
                     >
                       {al}
                     </button>

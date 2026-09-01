@@ -1,14 +1,15 @@
 import React from 'react';
+import { FRAME_FINISHES } from '../constants/storeConfigs';
 
 /**
- * iPhone & iPad Mockup with edge-to-edge screenshot masking and seamless crop.
+ * Universal Device Mockup supporting iPhone, iPad, Android Flagships, Tablets, & Foldables.
  */
-export default function DeviceMockup({ 
-  device = 'iphone',
+export default function DeviceMockup({
+  deviceConfig,
   orientation = 'portrait',
   rotation = 0,
   screenshot = null,
-  fitMode = 'cover', // 'cover' or 'custom'
+  fitMode = 'cover', // 'cover' or 'contain'
   innerZoom = 1,
   innerX = 0,
   innerY = 0,
@@ -16,24 +17,46 @@ export default function DeviceMockup({
   frameX = 0,
   frameY = 0,
   shadowIntensity = 0.5,
+  frameFinishId = 'titanium-dark',
+  customFrameColor = '#2d2d32',
+  cameraStyleOverride = null,
+  showGlare = false,
   onMouseDown
 }) {
-  const isIphone = device === 'iphone';
   const isLandscape = orientation === 'landscape';
+  const type = deviceConfig?.type || 'iphone';
+  const isIphone = type === 'iphone';
+  const isIpad = type === 'ipad';
+  const isAndroidPhone = type === 'android-phone' || type === 'feature-graphic';
+  const isAndroidTablet = type === 'android-tablet';
+  const isFoldable = type === 'android-foldable';
 
-  // Base dimensions
-  let baseWidth = isIphone ? 460 : 680;
-  let baseHeight = isIphone ? 950 : 920;
+  // Determine base dimensions
+  let baseWidth = deviceConfig?.baseWidth || 460;
+  let baseHeight = deviceConfig?.baseHeight || 950;
 
-  if (isLandscape) {
+  if (isLandscape && !isFoldable) {
     const temp = baseWidth;
     baseWidth = baseHeight;
     baseHeight = temp;
   }
 
-  const borderRadius = isIphone ? '52px' : '36px';
-  const innerBorderRadius = isIphone ? '36px' : '20px';
-  const padding = isIphone ? '18px' : '22px';
+  // Radiuses and padding
+  const borderRadius = deviceConfig?.borderRadius || (isIphone ? '52px' : isAndroidPhone ? '46px' : '36px');
+  const innerBorderRadius = deviceConfig?.innerBorderRadius || (isIphone ? '36px' : isAndroidPhone ? '32px' : '20px');
+  const padding = deviceConfig?.padding || (isIphone ? '18px' : isAndroidPhone ? '16px' : '22px');
+
+  // Frame finish styling
+  const finish = FRAME_FINISHES.find(f => f.id === frameFinishId) || FRAME_FINISHES[0];
+  const frameBackground = finish.id === 'custom'
+    ? customFrameColor
+    : finish.metallic || finish.color;
+  const frameBorderColor = finish.id === 'custom'
+    ? 'rgba(255, 255, 255, 0.2)'
+    : finish.border;
+
+  // Active camera style
+  const activeCameraStyle = cameraStyleOverride || deviceConfig?.cameraStyle || (isAndroidPhone ? 'punch-hole-center' : 'dynamic-island');
 
   return (
     <div
@@ -53,22 +76,40 @@ export default function DeviceMockup({
         transition: 'transform 0.05s ease-out'
       }}
     >
-      {/* Outer Device Frame */}
+      {/* Outer Device Chassis Frame */}
       <div
         style={{
           width: '100%',
           height: '100%',
           borderRadius: borderRadius,
-          background: 'linear-gradient(145deg, #2d2d32, #111115)',
+          background: frameBackground,
           padding: padding,
           boxSizing: 'border-box',
           position: 'relative',
-          border: '2px solid rgba(255, 255, 255, 0.18)',
-          boxShadow: 'inset 0 0 6px rgba(255, 255, 255, 0.25), inset 0 0 15px rgba(0,0,0,0.8)'
+          border: `2px solid ${frameBorderColor}`,
+          boxShadow: 'inset 0 0 8px rgba(255, 255, 255, 0.25), inset 0 0 16px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(0,0,0,0.6)'
         }}
       >
-        {/* Dynamic Island / Notch */}
-        {isIphone && !isLandscape && (
+        {/* Android Ear Speaker Slit (Top Bezel) */}
+        {isAndroidPhone && !isLandscape && (
+          <div
+            style={{
+              position: 'absolute',
+              top: '6px',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              width: '64px',
+              height: '3px',
+              backgroundColor: 'rgba(0, 0, 0, 0.7)',
+              borderRadius: '2px',
+              border: '0.5px solid rgba(255, 255, 255, 0.1)',
+              zIndex: 35
+            }}
+          />
+        )}
+
+        {/* Dynamic Island (iPhone 14/15/16 Pro) */}
+        {isIphone && activeCameraStyle === 'dynamic-island' && !isLandscape && (
           <div
             style={{
               position: 'absolute',
@@ -83,19 +124,46 @@ export default function DeviceMockup({
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'flex-end',
-              paddingRight: '12px'
+              paddingRight: '12px',
+              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.4)'
             }}
           >
-            <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#1c1c2e', border: '1px solid #0d0d18' }} />
+            <div style={{ width: '11px', height: '11px', borderRadius: '50%', background: '#1c1c2e', border: '1.5px solid #0d0d18' }} />
           </div>
         )}
 
+        {/* iPhone Classic Notch */}
+        {isIphone && activeCameraStyle === 'notch' && !isLandscape && (
+          <div
+            style={{
+              position: 'absolute',
+              top: '18px',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              width: '150px',
+              height: '28px',
+              backgroundColor: '#000000',
+              borderBottomLeftRadius: '16px',
+              borderBottomRightRadius: '16px',
+              zIndex: 30,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '12px'
+            }}
+          >
+            <div style={{ width: '40px', height: '4px', borderRadius: '2px', backgroundColor: '#222' }} />
+            <div style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#1a1a2e' }} />
+          </div>
+        )}
+
+        {/* iPhone Landscape Island */}
         {isIphone && isLandscape && (
           <div
             style={{
               position: 'absolute',
               top: '50%',
-              left: '28px',
+              left: '26px',
               transform: 'translateY(-50%)',
               width: '32px',
               height: '120px',
@@ -106,7 +174,96 @@ export default function DeviceMockup({
           />
         )}
 
-        {!isIphone && (
+        {/* Android Punch Hole - Center */}
+        {isAndroidPhone && activeCameraStyle === 'punch-hole-center' && (
+          <div
+            style={{
+              position: 'absolute',
+              top: isLandscape ? '50%' : '26px',
+              left: isLandscape ? '26px' : '50%',
+              transform: isLandscape ? 'translateY(-50%)' : 'translateX(-50%)',
+              width: '14px',
+              height: '14px',
+              backgroundColor: '#000000',
+              borderRadius: '50%',
+              zIndex: 30,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxShadow: '0 0 3px rgba(0, 0, 0, 0.9)'
+            }}
+          >
+            <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#1c2230', border: '0.5px solid #0f131a' }} />
+          </div>
+        )}
+
+        {/* Android Punch Hole - Left */}
+        {isAndroidPhone && activeCameraStyle === 'punch-hole-left' && (
+          <div
+            style={{
+              position: 'absolute',
+              top: '26px',
+              left: '32px',
+              width: '14px',
+              height: '14px',
+              backgroundColor: '#000000',
+              borderRadius: '50%',
+              zIndex: 30,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
+          >
+            <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#1c2230' }} />
+          </div>
+        )}
+
+        {/* Android Punch Hole - Right */}
+        {isAndroidPhone && activeCameraStyle === 'punch-hole-right' && (
+          <div
+            style={{
+              position: 'absolute',
+              top: '26px',
+              right: '32px',
+              width: '14px',
+              height: '14px',
+              backgroundColor: '#000000',
+              borderRadius: '50%',
+              zIndex: 30,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
+          >
+            <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#1c2230' }} />
+          </div>
+        )}
+
+        {/* Pill Camera Style (Dual punch hole) */}
+        {isAndroidPhone && activeCameraStyle === 'pill-camera' && (
+          <div
+            style={{
+              position: 'absolute',
+              top: '26px',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              width: '32px',
+              height: '14px',
+              backgroundColor: '#000000',
+              borderRadius: '10px',
+              zIndex: 30,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-evenly'
+            }}
+          >
+            <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#1c2230' }} />
+            <div style={{ width: '5px', height: '5px', borderRadius: '50%', background: '#1c2230' }} />
+          </div>
+        )}
+
+        {/* Tablet Front Camera Sensor */}
+        {(isIpad || isAndroidTablet) && (
           <div
             style={{
               position: 'absolute',
@@ -123,7 +280,24 @@ export default function DeviceMockup({
           />
         )}
 
-        {/* Screen Mask Container */}
+        {/* Foldable Device Center Hinge Crease Effect */}
+        {isFoldable && (
+          <div
+            style={{
+              position: 'absolute',
+              top: padding,
+              bottom: padding,
+              left: '50%',
+              width: '2px',
+              transform: 'translateX(-50%)',
+              background: 'linear-gradient(to right, rgba(0,0,0,0.4), rgba(255,255,255,0.08), rgba(0,0,0,0.4))',
+              zIndex: 25,
+              pointerEvents: 'none'
+            }}
+          />
+        )}
+
+        {/* Inner Screen Mask Container */}
         <div
           style={{
             width: '100%',
@@ -160,6 +334,22 @@ export default function DeviceMockup({
                   pointerEvents: 'none'
                 }}
               />
+
+              {/* Optional Specular Glass Glare Reflection */}
+              {showGlare && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: '-50%',
+                    left: '-30%',
+                    width: '160%',
+                    height: '200%',
+                    background: 'linear-gradient(115deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.05) 30%, transparent 60%)',
+                    pointerEvents: 'none',
+                    transform: 'rotate(-20deg)'
+                  }}
+                />
+              )}
             </div>
           ) : (
             <div
@@ -177,13 +367,15 @@ export default function DeviceMockup({
               }}
             >
               <div style={{ fontSize: '48px', marginBottom: '12px' }}>
-                {isIphone ? '📱' : '💻'}
+                {isIphone ? '🍏' : isIpad ? '💻' : isFoldable ? '📖' : '🤖'}
               </div>
               <div style={{ fontWeight: 700, fontSize: '20px', color: '#fff', marginBottom: '6px' }}>
                 Upload Screenshot
               </div>
-              <div style={{ fontSize: '13px', opacity: 0.8, maxWidth: '240px' }}>
-                Choose your {isIphone ? 'iPhone' : 'iPad'} screenshot to fit edge-to-edge inside mask
+              <div style={{ fontSize: '13px', opacity: 0.8, maxWidth: '250px' }}>
+                {deviceConfig?.name || 'Device'}
+                <br />
+                <span style={{ fontSize: '11px', color: '#38bdf8' }}>{deviceConfig?.badge}</span>
               </div>
             </div>
           )}
