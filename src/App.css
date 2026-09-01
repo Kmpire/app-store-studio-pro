@@ -763,3 +763,45 @@ body {
 .mb-2 { margin-bottom: 8px; }
 .mb-3 { margin-bottom: 12px; }
 .pt-3 { padding-top: 12px; }
+
+/* ========================================================================= */
+/* EDITABLE CANVAS TEXT STYLES */
+/* ========================================================================= */
+.editable-canvas-text {
+  position: relative;
+  transition: all 0.18s ease;
+  user-select: none;
+}
+
+.editable-canvas-text:hover {
+  outline: 2px dashed rgba(59, 130, 246, 0.7);
+  outline-offset: 4px;
+  background-color: rgba(59, 130, 246, 0.08);
+}
+
+.editable-canvas-text::after {
+  content: '✎ Double-click to edit';
+  position: absolute;
+  bottom: -24px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(15, 23, 42, 0.92);
+  color: #38bdf8;
+  font-size: 11px;
+  font-family: 'Inter', sans-serif;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  white-space: nowrap;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  z-index: 100;
+}
+
+.editable-canvas-text:hover::after {
+  opacity: 1;
+  transform: translateX(-50%) translateY(2px);
+}

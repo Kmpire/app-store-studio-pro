@@ -21,6 +21,7 @@ export default function DeviceMockup({
   customFrameColor = '#2d2d32',
   cameraStyleOverride = null,
   showGlare = false,
+  isDraggingOver = false,
   onMouseDown
 }) {
   const isLandscape = orientation === 'landscape';
@@ -86,8 +87,13 @@ export default function DeviceMockup({
           padding: padding,
           boxSizing: 'border-box',
           position: 'relative',
-          border: `2px solid ${frameBorderColor}`,
-          boxShadow: 'inset 0 0 8px rgba(255, 255, 255, 0.25), inset 0 0 16px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(0,0,0,0.6)'
+          border: isDraggingOver
+            ? '2px solid #3b82f6'
+            : `2px solid ${frameBorderColor}`,
+          boxShadow: isDraggingOver
+            ? '0 0 0 4px rgba(59, 130, 246, 0.4), 0 0 25px rgba(59, 130, 246, 0.5), inset 0 0 12px rgba(59, 130, 246, 0.3)'
+            : 'inset 0 0 8px rgba(255, 255, 255, 0.25), inset 0 0 16px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(0,0,0,0.6)',
+          transition: 'border-color 0.2s ease, box-shadow 0.2s ease'
         }}
       >
         {/* Android Ear Speaker Slit (Top Bezel) */}

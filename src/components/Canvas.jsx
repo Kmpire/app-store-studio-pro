@@ -1,4 +1,4 @@
-import React, { forwardRef, useState } from 'react';
+import React, { forwardRef, useState, useEffect } from 'react';
 import DeviceMockup from './DeviceMockup';
 
 const Canvas = forwardRef(({ state }, ref) => {
@@ -8,11 +8,15 @@ const Canvas = forwardRef(({ state }, ref) => {
     canvasHeight,
     bgState,
     text,
-    deviceState
+    setText,
+    deviceState,
+    setDeviceState
   } = state;
 
   const [isDraggingDevice, setIsDraggingDevice] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const [isDraggingOver, setIsDraggingOver] = useState(false);
+  const [editingField, setEditingField] = useState(null); // 'badge' | 'title' | 'subtitle' | null
 
   // Background styling
   const renderBackgroundLayer = () => {
@@ -63,6 +67,7 @@ const Canvas = forwardRef(({ state }, ref) => {
   };
 
   const handleMouseDown = (e) => {
+    if (editingField) return;
     e.stopPropagation();
     setIsDraggingDevice(true);
     setDragStart({
@@ -75,11 +80,51 @@ const Canvas = forwardRef(({ state }, ref) => {
     if (!isDraggingDevice) return;
     const newX = e.clientX - dragStart.x;
     const newY = e.clientY - dragStart.y;
-    state.setDeviceState(prev => ({ ...prev, frameX: newX, frameY: newY }));
+    setDeviceState(prev => ({ ...prev, frameX: newX, frameY: newY }));
   };
 
   const handleMouseUp = () => {
     setIsDraggingDevice(false);
+  };
+
+  // Drag and Drop File Handlers
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!isDraggingOver) {
+      setIsDraggingOver(true);
+    }
+  };
+
+  const handleDragEnter = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingOver(true);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.currentTarget && !e.currentTarget.contains(e.relatedTarget)) {
+      setIsDraggingOver(false);
+    }
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingOver(false);
+
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const file = e.dataTransfer.files[0];
+      if (file && file.type.startsWith('image/')) {
+        const reader = new FileReader();
+        reader.onload = (evt) => {
+          setDeviceState(prev => ({ ...prev, screenshot: evt.target.result }));
+        };
+        reader.readAsDataURL(file);
+      }
+    }
   };
 
   const isFeatureGraphic = currentDeviceConfig?.type === 'feature-graphic';
@@ -101,6 +146,13 @@ const Canvas = forwardRef(({ state }, ref) => {
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseUp}
+      onDragOver={handleDragOver}
+      onDragEnter={handleDragEnter}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+      onClick={() => {
+        if (editingField) setEditingField(null);
+      }}
     >
       {/* Background Layer */}
       {renderBackgroundLayer()}
@@ -120,7 +172,7 @@ const Canvas = forwardRef(({ state }, ref) => {
       />
 
       {/* Text Section */}
-      {(text.title || text.subtitle || text.badgeText) && (
+      {(text.title || text.subtitle || text.badgeText || editingField) && (
         <div
           style={{
             position: 'absolute',
@@ -135,60 +187,215 @@ const Canvas = forwardRef(({ state }, ref) => {
           }}
         >
           {/* Optional App / Feature Badge */}
-          {text.badgeText && (
-            <div style={{ marginBottom: '14px' }}>
-              <span
-                style={{
-                  display: 'inline-block',
-                  padding: '6px 18px',
-                  backgroundColor: 'rgba(255, 255, 255, 0.15)',
-                  backdropFilter: 'blur(8px)',
-                  borderRadius: '24px',
-                  color: '#ffffff',
-                  fontSize: `${Math.round((text.titleSize || 60) * 0.32)}px`,
-                  fontFamily: text.fontFamily,
-                  fontWeight: 700,
-                  letterSpacing: '0.04em',
-                  border: '1px solid rgba(255, 255, 255, 0.3)',
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.3)'
-                }}
-              >
-                {text.badgeText}
-              </span>
+          {(text.badgeText || editingField === 'badge') && (
+            <div 
+              style={{ marginBottom: '14px', pointerEvents: 'auto' }}
+              onClick={(e) => e.stopPropagation()}
+              onMouseDown={(e) => e.stopPropagation()}
+            >
+              {editingField === 'badge' ? (
+                <input
+                  type="text"
+                  autoFocus
+                  value={text.badgeText || ''}
+                  onChange={(e) => setText(p => ({ ...p, badgeText: e.target.value }))}
+                  onBlur={() => setEditingField(null)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === 'Escape') {
+                      setEditingField(null);
+                    }
+                  }}
+                  placeholder="Badge text..."
+                  style={{
+                    display: 'inline-block',
+                    padding: '6px 18px',
+                    backgroundColor: 'rgba(15, 23, 42, 0.9)',
+                    backdropFilter: 'blur(12px)',
+                    borderRadius: '24px',
+                    color: '#ffffff',
+                    fontSize: `${Math.round((text.titleSize || 60) * 0.32)}px`,
+                    fontFamily: text.fontFamily,
+                    fontWeight: 700,
+                    letterSpacing: '0.04em',
+                    border: '2px solid #3b82f6',
+                    boxShadow: '0 0 20px rgba(59, 130, 246, 0.6)',
+                    outline: 'none',
+                    textAlign: text.align,
+                    maxWidth: '85%'
+                  }}
+                />
+              ) : (
+                <span
+                  className="editable-canvas-text"
+                  title="Double-click to edit tagline"
+                  onDoubleClick={(e) => {
+                    e.stopPropagation();
+                    setEditingField('badge');
+                  }}
+                  style={{
+                    display: 'inline-block',
+                    padding: '6px 18px',
+                    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+                    backdropFilter: 'blur(8px)',
+                    borderRadius: '24px',
+                    color: '#ffffff',
+                    fontSize: `${Math.round((text.titleSize || 60) * 0.32)}px`,
+                    fontFamily: text.fontFamily,
+                    fontWeight: 700,
+                    letterSpacing: '0.04em',
+                    border: '1px solid rgba(255, 255, 255, 0.3)',
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+                    cursor: 'text',
+                    transition: 'border-color 0.2s, background-color 0.2s'
+                  }}
+                >
+                  {text.badgeText}
+                </span>
+              )}
             </div>
           )}
 
-          {text.title && (
-            <h1
-              style={{
-                fontSize: `${text.titleSize}px`,
-                color: text.titleColor,
-                fontFamily: text.fontFamily,
-                fontWeight: text.fontWeight || 800,
-                lineHeight: 1.15,
-                marginBottom: text.subtitle ? '18px' : '0',
-                whiteSpace: 'pre-wrap',
-                textShadow: '0 6px 20px rgba(0,0,0,0.5)'
-              }}
+          {/* Title Headline */}
+          {(text.title || editingField === 'title') && (
+            <div
+              style={{ pointerEvents: 'auto', marginBottom: text.subtitle ? '18px' : '0' }}
+              onClick={(e) => e.stopPropagation()}
+              onMouseDown={(e) => e.stopPropagation()}
             >
-              {text.title}
-            </h1>
+              {editingField === 'title' ? (
+                <textarea
+                  autoFocus
+                  value={text.title}
+                  onChange={(e) => setText(p => ({ ...p, title: e.target.value }))}
+                  onBlur={() => setEditingField(null)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Escape') {
+                      setEditingField(null);
+                    } else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                      setEditingField(null);
+                    }
+                  }}
+                  placeholder="Headline title..."
+                  rows={Math.max((text.title || '').split('\n').length, 1)}
+                  style={{
+                    width: '100%',
+                    fontSize: `${text.titleSize}px`,
+                    color: text.titleColor,
+                    fontFamily: text.fontFamily,
+                    fontWeight: text.fontWeight || 800,
+                    lineHeight: 1.15,
+                    textAlign: text.align,
+                    backgroundColor: 'rgba(15, 23, 42, 0.85)',
+                    backdropFilter: 'blur(12px)',
+                    border: '2px solid #3b82f6',
+                    borderRadius: '12px',
+                    padding: '8px 14px',
+                    outline: 'none',
+                    resize: 'none',
+                    boxShadow: '0 0 25px rgba(59, 130, 246, 0.6)',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              ) : (
+                <h1
+                  className="editable-canvas-text"
+                  title="Double-click to edit title"
+                  onDoubleClick={(e) => {
+                    e.stopPropagation();
+                    setEditingField('title');
+                  }}
+                  style={{
+                    fontSize: `${text.titleSize}px`,
+                    color: text.titleColor,
+                    fontFamily: text.fontFamily,
+                    fontWeight: text.fontWeight || 800,
+                    lineHeight: 1.15,
+                    margin: 0,
+                    whiteSpace: 'pre-wrap',
+                    textShadow: '0 6px 20px rgba(0,0,0,0.5)',
+                    cursor: 'text',
+                    borderRadius: '8px',
+                    padding: '4px 6px',
+                    display: 'inline-block',
+                    maxWidth: '100%'
+                  }}
+                >
+                  {text.title}
+                </h1>
+              )}
+            </div>
           )}
-          {text.subtitle && (
-            <p
-              style={{
-                fontSize: `${text.subtitleSize}px`,
-                color: text.subtitleColor,
-                fontFamily: text.fontFamily,
-                fontWeight: 500,
-                opacity: 0.94,
-                lineHeight: 1.35,
-                whiteSpace: 'pre-wrap',
-                textShadow: '0 4px 14px rgba(0,0,0,0.5)'
-              }}
+
+          {/* Subtitle Text */}
+          {(text.subtitle || editingField === 'subtitle') && (
+            <div
+              style={{ pointerEvents: 'auto' }}
+              onClick={(e) => e.stopPropagation()}
+              onMouseDown={(e) => e.stopPropagation()}
             >
-              {text.subtitle}
-            </p>
+              {editingField === 'subtitle' ? (
+                <textarea
+                  autoFocus
+                  value={text.subtitle}
+                  onChange={(e) => setText(p => ({ ...p, subtitle: e.target.value }))}
+                  onBlur={() => setEditingField(null)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Escape') {
+                      setEditingField(null);
+                    } else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                      setEditingField(null);
+                    }
+                  }}
+                  placeholder="Subtitle description..."
+                  rows={Math.max((text.subtitle || '').split('\n').length, 1)}
+                  style={{
+                    width: '100%',
+                    fontSize: `${text.subtitleSize}px`,
+                    color: text.subtitleColor,
+                    fontFamily: text.fontFamily,
+                    fontWeight: 500,
+                    lineHeight: 1.35,
+                    textAlign: text.align,
+                    backgroundColor: 'rgba(15, 23, 42, 0.85)',
+                    backdropFilter: 'blur(12px)',
+                    border: '2px solid #3b82f6',
+                    borderRadius: '12px',
+                    padding: '8px 14px',
+                    outline: 'none',
+                    resize: 'none',
+                    boxShadow: '0 0 25px rgba(59, 130, 246, 0.6)',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              ) : (
+                <p
+                  className="editable-canvas-text"
+                  title="Double-click to edit subtitle"
+                  onDoubleClick={(e) => {
+                    e.stopPropagation();
+                    setEditingField('subtitle');
+                  }}
+                  style={{
+                    fontSize: `${text.subtitleSize}px`,
+                    color: text.subtitleColor,
+                    fontFamily: text.fontFamily,
+                    fontWeight: 500,
+                    opacity: 0.94,
+                    lineHeight: 1.35,
+                    margin: 0,
+                    whiteSpace: 'pre-wrap',
+                    textShadow: '0 4px 14px rgba(0,0,0,0.5)',
+                    cursor: 'text',
+                    borderRadius: '8px',
+                    padding: '4px 6px',
+                    display: 'inline-block',
+                    maxWidth: '100%'
+                  }}
+                >
+                  {text.subtitle}
+                </p>
+              )}
+            </div>
           )}
         </div>
       )}
@@ -211,6 +418,7 @@ const Canvas = forwardRef(({ state }, ref) => {
         customFrameColor={deviceState.customFrameColor || '#2d2d32'}
         cameraStyleOverride={deviceState.cameraStyleOverride || null}
         showGlare={deviceState.showGlare || false}
+        isDraggingOver={isDraggingOver}
         onMouseDown={handleMouseDown}
       />
     </div>

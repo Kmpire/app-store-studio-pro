@@ -75,6 +75,58 @@ export default function App() {
     return () => window.removeEventListener('resize', handleResize);
   }, [canvasHeight, canvasWidth]);
 
+  // Global Clipboard Paste Listener (Ctrl+V / Cmd+V for images) & Drag/Drop Fallback
+  useEffect(() => {
+    const handlePaste = (e) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (item.type.indexOf('image') !== -1) {
+          const file = item.getAsFile();
+          if (file) {
+            e.preventDefault();
+            const reader = new FileReader();
+            reader.onload = (evt) => {
+              setDeviceState(p => ({ ...p, screenshot: evt.target.result }));
+            };
+            reader.readAsDataURL(file);
+            break;
+          }
+        }
+      }
+    };
+
+    const handleWindowDragOver = (e) => {
+      e.preventDefault();
+    };
+
+    const handleWindowDrop = (e) => {
+      if (!e.defaultPrevented && e.dataTransfer?.files?.length > 0) {
+        const file = e.dataTransfer.files[0];
+        if (file && file.type.startsWith('image/')) {
+          e.preventDefault();
+          const reader = new FileReader();
+          reader.onload = (evt) => {
+            setDeviceState(p => ({ ...p, screenshot: evt.target.result }));
+          };
+          reader.readAsDataURL(file);
+        }
+      }
+    };
+
+    window.addEventListener('paste', handlePaste);
+    window.addEventListener('dragover', handleWindowDragOver);
+    window.addEventListener('drop', handleWindowDrop);
+
+    return () => {
+      window.removeEventListener('paste', handlePaste);
+      window.removeEventListener('dragover', handleWindowDragOver);
+      window.removeEventListener('drop', handleWindowDrop);
+    };
+  }, [currentDeviceId]);
+
   // Switch Store
   const setStore = (storeId) => {
     setCurrentStore(storeId);
