@@ -14,8 +14,11 @@ const Canvas = forwardRef(({ state }, ref) => {
     activeDeviceId,
     setActiveDeviceId,
     updateDevice,
-    deviceState
+    deviceState,
+    activeLocale = 'en-US'
   } = state;
+
+  const isRtl = activeLocale.startsWith('ar') || activeLocale.startsWith('he') || activeLocale.startsWith('fa') || activeLocale.startsWith('ur');
 
   const [draggingDeviceId, setDraggingDeviceId] = useState(null);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
@@ -188,6 +191,7 @@ const Canvas = forwardRef(({ state }, ref) => {
       {/* Text Section */}
       {(text.title || text.subtitle || text.badgeText || editingField) && (
         <div
+          dir={isRtl ? 'rtl' : 'ltr'}
           style={{
             position: 'absolute',
             left: 0,
@@ -196,6 +200,7 @@ const Canvas = forwardRef(({ state }, ref) => {
             transform: 'translateY(-50%)',
             padding: isFeatureGraphic ? '0 50px' : '0 8%',
             textAlign: text.align,
+            direction: isRtl ? 'rtl' : 'ltr',
             zIndex: 20,
             pointerEvents: 'none'
           }}

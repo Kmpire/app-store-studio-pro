@@ -1,9 +1,14 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Download, ZoomIn, ZoomOut, Maximize2 } from 'lucide-react';
+import { Download, ZoomIn, ZoomOut, Maximize2, FolderArchive, Globe, FileDown, FileUp, FolderDown, ChevronDown, Undo2, Redo2 } from 'lucide-react';
 import { toPng } from 'html-to-image';
+import JSZip from 'jszip';
 import Sidebar from './components/Sidebar';
 import Canvas from './components/Canvas';
+import StripManager from './components/StripManager';
+import StoreMockup from './components/StoreMockup';
+import LocaleManagerModal from './components/LocaleManagerModal';
 import { STORES, DEVICE_CONFIGS } from './constants/storeConfigs';
+import { SUPPORTED_LOCALES } from './constants/goldieLayouts';
 import './App.css';
 
 const createInitialDevice = (configId = 'iphone-6-7') => {
@@ -31,35 +36,32 @@ const createInitialDevice = (configId = 'iphone-6-7') => {
   };
 };
 
-export default function App() {
-  const canvasRef = useRef(null);
+const createInitialTextStyle = () => ({
+  titleSize: 110,
+  titleColor: '#ffffff',
+  subtitleSize: 52,
+  subtitleColor: '#cbd5e1',
+  fontFamily: 'Cairo',
+  offsetY: 12,
+  align: 'center'
+});
 
-  // Active Store: 'app-store' or 'play-store'
-  const [currentStore, setCurrentStore] = useState(STORES.APP_STORE);
-
-  // Active Store Format (Canvas Dimensions)
-  const [currentDeviceId, setCurrentDeviceId] = useState('iphone-6-7');
-
-  const currentDeviceConfig = DEVICE_CONFIGS[currentDeviceId] || DEVICE_CONFIGS['iphone-6-7'];
-
-  // Native dimensions
-  const canvasWidth = currentDeviceConfig.width;
-  const canvasHeight = currentDeviceConfig.height;
-
-  // Viewport Zoom
-  const [viewportZoom, setViewportZoom] = useState(0.24);
-
-  // Multi-Device State List
-  const [devicesList, setDevicesList] = useState([createInitialDevice('iphone-6-7')]);
-
-  // Active selected device ID
-  const [activeDeviceId, setActiveDeviceId] = useState('device-1');
-
-  // Currently active device object
-  const activeDeviceState = devicesList.find(d => d.id === activeDeviceId) || devicesList[0] || createInitialDevice(currentDeviceId);
-
-  // Background state
-  const [bgState, setBgState] = useState({
+const createInitialScene = (id = 'scene-1', index = 1, formatId = 'iphone-6-7', storeId = STORES.APP_STORE) => ({
+  id,
+  deviceId: formatId,
+  store: storeId,
+  headlines: {
+    'en-US': index === 1 ? 'Your App Headline' : `App Feature #${index}`,
+    'ar-SA': index === 1 ? 'عنوان تطبيقك الجذاب' : `ميزة التطبيق #${index}`
+  },
+  subheads: {
+    'en-US': 'Add a subtitle highlighting your best features.',
+    'ar-SA': 'أضف وصفاً تسويقياً يبرز أهم مميزات تطبيقك.'
+  },
+  badgeText: '',
+  textStyle: createInitialTextStyle(),
+  devicesList: [createInitialDevice(formatId)],
+  bgState: {
     type: 'gradient',
     color: '#0f172a',
     color1: '#0f172a',
@@ -73,21 +75,293 @@ export default function App() {
     blur: 0,
     overlayColor: '#000000',
     overlayOpacity: 0
+  }
+});
+
+export default function App() {
+  const canvasRef = useRef(null);
+
+  // Workflow Mode: 'editor' | 'strip' | 'mockup'
+  const [viewMode, setViewMode] = useState('editor');
+
+  // Prevent accidental progress loss on page refresh or navigation
+  useEffect(() => {
+    const handleBeforeUnload = (e) => {
+      e.preventDefault();
+      e.returnValue = '';
+      return '';
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, []);
+
+  // Multi-Scenes list (starts with exactly 1 scene by default)
+  const [scenes, setScenes] = useState(() => [createInitialScene('scene-1', 1)]);
+  const [activeSceneId, setActiveSceneId] = useState('scene-1');
+  const activeScene = scenes.find(s => s.id === activeSceneId) || scenes[0];
+
+  // History State for Undo / Redo
+  const [history, setHistory] = useState(() => [{
+    scenes: [createInitialScene('scene-1', 1)],
+    activeSceneId: 'scene-1'
+  }]);
+  const [historyIndex, setHistoryIndex] = useState(0);
+
+  const isNavigatingHistoryRef = useRef(false);
+  const debounceHistoryTimeoutRef = useRef(null);
+  const historyIndexRef = useRef(historyIndex);
+  historyIndexRef.current = historyIndex;
+  const historyRef = useRef(history);
+  historyRef.current = history;
+
+  // Active Store & Canvas Dimensions derived directly per activeScene
+  const currentStore = activeScene.store || STORES.APP_STORE;
+  const currentDeviceId = activeScene.deviceId || 'iphone-6-7';
+  const currentDeviceConfig = DEVICE_CONFIGS[currentDeviceId] || DEVICE_CONFIGS['iphone-6-7'];
+
+  // Native dimensions for active scene
+  const canvasWidth = currentDeviceConfig.width;
+  const canvasHeight = currentDeviceConfig.height;
+
+  // Viewport Zoom
+  const [viewportZoom, setViewportZoom] = useState(0.24);
+
+  // Active Device in the scene
+  const devicesList = activeScene.devicesList || [];
+  const [activeDeviceId, setActiveDeviceId] = useState(() => devicesList[0]?.id || 'device-1');
+  const activeDeviceState = devicesList.find(d => d.id === activeDeviceId) || devicesList[0] || createInitialDevice(currentDeviceId);
+
+  const activeSceneIdRef = useRef(activeSceneId);
+  activeSceneIdRef.current = activeSceneId;
+  const activeDeviceIdRef = useRef(activeDeviceId);
+  activeDeviceIdRef.current = activeDeviceId;
+  const devicesListRef = useRef(devicesList);
+  devicesListRef.current = devicesList;
+
+  // Ensure activeDeviceId always belongs to the current scene's devices
+  useEffect(() => {
+    const curList = activeScene.devicesList || [];
+    if (curList.length > 0 && !curList.some(d => d.id === activeDeviceId)) {
+      setActiveDeviceId(curList[0].id);
+    }
+  }, [activeSceneId]);
+
+  // Record history snapshot with smart debounce for continuous interactions
+  useEffect(() => {
+    if (isNavigatingHistoryRef.current) {
+      isNavigatingHistoryRef.current = false;
+      return;
+    }
+
+    if (debounceHistoryTimeoutRef.current) {
+      clearTimeout(debounceHistoryTimeoutRef.current);
+    }
+
+    debounceHistoryTimeoutRef.current = setTimeout(() => {
+      const curIndex = historyIndexRef.current;
+      const curHistory = historyRef.current;
+
+      const newSnapshot = {
+        scenes: JSON.parse(JSON.stringify(scenes)),
+        activeSceneId: activeSceneIdRef.current
+      };
+
+      const lastSnapshot = curHistory[curIndex];
+      if (lastSnapshot && JSON.stringify(lastSnapshot.scenes) === JSON.stringify(newSnapshot.scenes)) {
+        return;
+      }
+
+      const sliced = curHistory.slice(0, curIndex + 1);
+      const updated = [...sliced, newSnapshot];
+      if (updated.length > 40) {
+        updated.shift();
+      }
+
+      setHistory(updated);
+      setHistoryIndex(updated.length - 1);
+    }, 350);
+
+    return () => {
+      if (debounceHistoryTimeoutRef.current) {
+        clearTimeout(debounceHistoryTimeoutRef.current);
+      }
+    };
+  }, [scenes]);
+
+  const canUndo = historyIndex > 0;
+  const canRedo = historyIndex < history.length - 1;
+
+  const handleUndo = () => {
+    const curIndex = historyIndexRef.current;
+    if (curIndex <= 0) return;
+
+    if (debounceHistoryTimeoutRef.current) {
+      clearTimeout(debounceHistoryTimeoutRef.current);
+    }
+
+    const targetIndex = curIndex - 1;
+    const targetSnapshot = historyRef.current[targetIndex];
+    if (!targetSnapshot) return;
+
+    isNavigatingHistoryRef.current = true;
+    setHistoryIndex(targetIndex);
+    setScenes(JSON.parse(JSON.stringify(targetSnapshot.scenes)));
+    if (targetSnapshot.activeSceneId) {
+      setActiveSceneId(targetSnapshot.activeSceneId);
+    }
+  };
+
+  const handleRedo = () => {
+    const curIndex = historyIndexRef.current;
+    if (curIndex >= historyRef.current.length - 1) return;
+
+    if (debounceHistoryTimeoutRef.current) {
+      clearTimeout(debounceHistoryTimeoutRef.current);
+    }
+
+    const targetIndex = curIndex + 1;
+    const targetSnapshot = historyRef.current[targetIndex];
+    if (!targetSnapshot) return;
+
+    isNavigatingHistoryRef.current = true;
+    setHistoryIndex(targetIndex);
+    setScenes(JSON.parse(JSON.stringify(targetSnapshot.scenes)));
+    if (targetSnapshot.activeSceneId) {
+      setActiveSceneId(targetSnapshot.activeSceneId);
+    }
+  };
+
+  // Background State for active scene
+  const bgState = activeScene.bgState;
+  const setBgState = (updater) => {
+    setScenes(prev => prev.map(sc => {
+      if (sc.id === activeSceneId) {
+        const nextBg = typeof updater === 'function' ? updater(sc.bgState) : updater;
+        return { ...sc, bgState: nextBg };
+      }
+      return sc;
+    }));
+  };
+
+  // Locales: Default 1 language ('en-US')
+  const [locales, setLocales] = useState(['en-US']);
+  const [activeLocale, setActiveLocale] = useState('en-US');
+  const [isLocaleModalOpen, setIsLocaleModalOpen] = useState(false);
+  const currentLocaleObj = SUPPORTED_LOCALES.find(l => l.code === activeLocale) || { flag: '🌐', name: activeLocale };
+
+  // Top Header Dropdowns State
+  const [isLangDropdownOpen, setIsLangDropdownOpen] = useState(false);
+  const [isProjectDropdownOpen, setIsProjectDropdownOpen] = useState(false);
+  const langDropdownRef = useRef(null);
+  const projectDropdownRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (langDropdownRef.current && !langDropdownRef.current.contains(e.target)) {
+        setIsLangDropdownOpen(false);
+      }
+      if (projectDropdownRef.current && !projectDropdownRef.current.contains(e.target)) {
+        setIsProjectDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Text State for active scene & active locale (isolated per slide via scene.textStyle)
+  const [text, setTextInternal] = useState(() => {
+    const sceneStyle = activeScene.textStyle || createInitialTextStyle();
+    return {
+      badgeText: activeScene.badgeText || '',
+      title: activeScene.headlines[activeLocale] || activeScene.headlines['en-US'] || 'Your App Headline',
+      titleSize: sceneStyle.titleSize ?? 110,
+      titleColor: sceneStyle.titleColor ?? '#ffffff',
+      subtitle: activeScene.subheads[activeLocale] || activeScene.subheads['en-US'] || 'Add a subtitle highlighting your best features.',
+      subtitleSize: sceneStyle.subtitleSize ?? 52,
+      subtitleColor: sceneStyle.subtitleColor ?? '#cbd5e1',
+      fontFamily: sceneStyle.fontFamily ?? 'Cairo',
+      offsetY: sceneStyle.offsetY ?? 12,
+      align: sceneStyle.align ?? 'center'
+    };
   });
 
-  // Text state
-  const [text, setText] = useState({
-    badgeText: '',
-    title: 'Your App Headline',
-    titleSize: 110,
-    titleColor: '#ffffff',
-    subtitle: 'Add a subtitle highlighting your best features.',
-    subtitleSize: 52,
-    subtitleColor: '#cbd5e1',
-    fontFamily: 'Cairo',
-    offsetY: 12,
-    align: 'center'
-  });
+  // Sync text when active scene or active locale changes
+  useEffect(() => {
+    const sceneStyle = activeScene.textStyle || createInitialTextStyle();
+    setTextInternal({
+      badgeText: activeScene.badgeText || '',
+      title: activeScene.headlines[activeLocale] || activeScene.headlines['en-US'] || '',
+      subtitle: activeScene.subheads[activeLocale] || activeScene.subheads['en-US'] || '',
+      titleSize: sceneStyle.titleSize ?? 110,
+      titleColor: sceneStyle.titleColor ?? '#ffffff',
+      subtitleSize: sceneStyle.subtitleSize ?? 52,
+      subtitleColor: sceneStyle.subtitleColor ?? '#cbd5e1',
+      fontFamily: sceneStyle.fontFamily ?? 'Cairo',
+      offsetY: sceneStyle.offsetY ?? 12,
+      align: sceneStyle.align ?? 'center'
+    });
+  }, [activeSceneId, activeLocale, activeScene.headlines, activeScene.subheads, activeScene.badgeText, activeScene.textStyle]);
+
+  // Sync back text modifications to active scene with textStyle persistence
+  const setText = (updater) => {
+    setTextInternal(prev => {
+      const next = typeof updater === 'function' ? updater(prev) : updater;
+      setScenes(scs => scs.map(s => {
+        if (s.id === activeSceneId) {
+          return {
+            ...s,
+            badgeText: next.badgeText !== undefined ? next.badgeText : (s.badgeText || ''),
+            headlines: next.title !== undefined ? { ...s.headlines, [activeLocale]: next.title } : s.headlines,
+            subheads: next.subtitle !== undefined ? { ...s.subheads, [activeLocale]: next.subtitle } : s.subheads,
+            textStyle: {
+              titleSize: next.titleSize ?? s.textStyle?.titleSize ?? 110,
+              titleColor: next.titleColor ?? s.textStyle?.titleColor ?? '#ffffff',
+              subtitleSize: next.subtitleSize ?? s.textStyle?.subtitleSize ?? 52,
+              subtitleColor: next.subtitleColor ?? s.textStyle?.subtitleColor ?? '#cbd5e1',
+              fontFamily: next.fontFamily ?? s.textStyle?.fontFamily ?? 'Cairo',
+              offsetY: next.offsetY ?? s.textStyle?.offsetY ?? 12,
+              align: next.align ?? s.textStyle?.align ?? 'center'
+            }
+          };
+        }
+        return s;
+      }));
+      return next;
+    });
+  };
+
+  // Handle translation matrix text updates in LocaleManagerModal
+  const handleUpdateSceneText = (sceneId, localeCode, field, value) => {
+    setScenes(scs => scs.map(s => {
+      if (s.id === sceneId) {
+        if (field === 'headline') {
+          return { ...s, headlines: { ...s.headlines, [localeCode]: value } };
+        } else {
+          return { ...s, subheads: { ...s.subheads, [localeCode]: value } };
+        }
+      }
+      return s;
+    }));
+  };
+
+  const handleAddLocale = (code) => {
+    if (!locales.includes(code)) {
+      setLocales(p => [...p, code]);
+    }
+    setActiveLocale(code);
+  };
+
+  const handleRemoveLocale = (code) => {
+    if (locales.length <= 1) return;
+    const remaining = locales.filter(c => c !== code);
+    setLocales(remaining);
+    if (activeLocale === code) {
+      setActiveLocale(remaining[0]);
+    }
+  };
 
   // Custom Font Library
   const [availableFonts, setAvailableFonts] = useState([
@@ -100,35 +374,60 @@ export default function App() {
     { name: 'Montserrat (Geometric)', value: 'Montserrat' },
     { name: 'Poppins (Rounded)', value: 'Poppins' },
     { name: 'Playfair Display (Serif)', value: 'Playfair Display' },
-    { name: 'Bebas Neue (Impact)', value: 'Bebas Neue' },
+    { name: 'Bebas Neue (Impact)', value: 'Bebas Neue' }
   ]);
 
   const [isExporting, setIsExporting] = useState(false);
+  const [isExportingZip, setIsExportingZip] = useState(false);
+  const [renderedPreviews] = useState({});
 
-  // Update a specific device
+  // Instant 0ms Mode Switching (no main thread freeze!)
+  const handleSwitchMode = (newMode) => {
+    setViewMode(newMode);
+  };
+
+  // Device Update Function (Using activeSceneIdRef to ensure atomic targeting)
   const updateDevice = (id, updater) => {
-    setDevicesList(prev => prev.map(d => {
-      if (d.id === id) {
-        const next = typeof updater === 'function' ? updater(d) : updater;
-        return { ...d, ...next };
+    const curSceneId = activeSceneIdRef.current;
+    setScenes(prevScenes => prevScenes.map(sc => {
+      if (sc.id === curSceneId) {
+        return {
+          ...sc,
+          devicesList: sc.devicesList.map(d => {
+            if (d.id === id) {
+              const next = typeof updater === 'function' ? updater(d) : updater;
+              return { ...d, ...next };
+            }
+            return d;
+          })
+        };
       }
-      return d;
+      return sc;
     }));
   };
 
-  // Update active device (compatibility with single device controls)
   const setDeviceState = (updater) => {
-    if (activeDeviceId) {
-      updateDevice(activeDeviceId, updater);
+    const curDevId = activeDeviceIdRef.current;
+    if (curDevId) {
+      updateDevice(curDevId, updater);
     }
   };
 
-  // Add a new device to the canvas (supports iOS, Android, Tablets, etc.)
+  const setDevicesList = (updater) => {
+    const curSceneId = activeSceneIdRef.current;
+    setScenes(prev => prev.map(sc => {
+      if (sc.id === curSceneId) {
+        const nextList = typeof updater === 'function' ? updater(sc.devicesList) : updater;
+        return { ...sc, devicesList: nextList };
+      }
+      return sc;
+    }));
+  };
+
   const addDevice = (configId = null, overrides = {}) => {
     const newId = `device-${Date.now()}`;
     const newIndex = devicesList.length + 1;
-    
-    const targetConfigId = configId || activeDeviceState?.configId || currentDeviceId || 'iphone-6-7';
+    const targetConfigId = configId || activeDeviceState?.configId || 'iphone-6-7';
     const targetConfig = DEVICE_CONFIGS[targetConfigId] || DEVICE_CONFIGS['iphone-6-7'];
     const isTargetAndroid = targetConfig.store === STORES.PLAY_STORE;
 
@@ -150,7 +449,7 @@ export default function App() {
       frameFinishId: 'titanium-dark',
       customFrameColor: '#2d2d32',
       cameraStyleOverride: null,
-      showGlare: activeDeviceState?.showGlare || false,
+      showGlare: false,
       zIndex: (devicesList.length + 1) * 10,
       ...overrides
     };
@@ -159,166 +458,101 @@ export default function App() {
     setActiveDeviceId(newId);
   };
 
-  // Remove a device from canvas
-  const removeDevice = (id) => {
+  const removeDevice = (idToRemove) => {
     if (devicesList.length <= 1) return;
-    setDevicesList(prev => {
-      const filtered = prev.filter(d => d.id !== id);
-      if (activeDeviceId === id && filtered.length > 0) {
-        setActiveDeviceId(filtered[0].id);
-      }
-      return filtered;
-    });
+    const nextList = devicesList.filter(d => d.id !== idToRemove);
+    setDevicesList(nextList);
+    if (activeDeviceId === idToRemove) {
+      setActiveDeviceId(nextList[0]?.id || null);
+    }
   };
 
-  // Duplicate an existing device
-  const duplicateDevice = (id) => {
-    const target = devicesList.find(d => d.id === id) || activeDeviceState;
-    if (!target) return;
+  const duplicateDevice = (idToDup) => {
+    const dev = devicesList.find(d => d.id === idToDup);
+    if (!dev) return;
     const newId = `device-${Date.now()}`;
-    const newIndex = devicesList.length + 1;
-    const duplicated = {
-      ...target,
+    const dup = {
+      ...dev,
       id: newId,
-      name: `Phone ${newIndex}`,
-      frameX: (target.frameX || 0) + 110,
-      frameY: (target.frameY || 0) + 40,
+      name: `${dev.name} (Copy)`,
+      frameX: dev.frameX + 80,
+      frameY: dev.frameY + 40,
       zIndex: (devicesList.length + 1) * 10
     };
-    setDevicesList(prev => [...prev, duplicated]);
+    setDevicesList(prev => [...prev, dup]);
     setActiveDeviceId(newId);
   };
 
-  // Reorder Device (Bring forward / Send backward)
-  const reorderDevice = (id, direction) => {
-    const index = devicesList.findIndex(d => d.id === id);
-    if (index === -1) return;
-    const list = [...devicesList];
-    if (direction === 'forward' && index < list.length - 1) {
-      const temp = list[index];
-      list[index] = list[index + 1];
-      list[index + 1] = temp;
-    } else if (direction === 'backward' && index > 0) {
-      const temp = list[index];
-      list[index] = list[index - 1];
-      list[index - 1] = temp;
-    } else if (direction === 'front') {
-      const item = list.splice(index, 1)[0];
-      list.push(item);
-    } else if (direction === 'back') {
-      const item = list.splice(index, 1)[0];
-      list.unshift(item);
-    }
-    const updated = list.map((d, idx) => ({ ...d, zIndex: (idx + 1) * 10 }));
-    setDevicesList(updated);
+  const reorderDevice = (idToMove, direction = 'up') => {
+    const idx = devicesList.findIndex(d => d.id === idToMove);
+    if (idx === -1) return;
+    const isForward = direction === 'up' || direction === 'forward';
+    const targetIdx = isForward ? idx + 1 : idx - 1;
+    if (targetIdx < 0 || targetIdx >= devicesList.length) return;
+
+    const newList = [...devicesList];
+    const [moved] = newList.splice(idx, 1);
+    newList.splice(targetIdx, 0, moved);
+    newList.forEach((d, i) => { d.zIndex = (i + 1) * 10; });
+    setDevicesList(newList);
   };
 
-  // Auto-fit viewport zoom on window resize or device/canvas size change
-  useEffect(() => {
-    const handleResize = () => {
-      const availableHeight = window.innerHeight - 110;
-      const availableWidth = window.innerWidth - 420;
-      const scaleH = availableHeight / canvasHeight;
-      const scaleW = availableWidth / canvasWidth;
-      const calculatedScale = Math.min(scaleH, scaleW);
-      setViewportZoom(Math.min(Math.max(calculatedScale, 0.08), 1.0));
-    };
-    handleResize();
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, [canvasHeight, canvasWidth]);
-
-  // Global Clipboard Paste Listener (Ctrl+V / Cmd+V for images onto active phone)
-  useEffect(() => {
-    const handlePaste = (e) => {
-      const items = e.clipboardData?.items;
-      if (!items) return;
-
-      for (let i = 0; i < items.length; i++) {
-        const item = items[i];
-        if (item.type.indexOf('image') !== -1) {
-          const file = item.getAsFile();
-          if (file) {
-            e.preventDefault();
-            const reader = new FileReader();
-            reader.onload = (evt) => {
-              if (activeDeviceId) {
-                updateDevice(activeDeviceId, { screenshot: evt.target.result });
-              }
-            };
-            reader.readAsDataURL(file);
-            break;
-          }
-        }
-      }
-    };
-
-    const handleWindowDragOver = (e) => {
-      e.preventDefault();
-    };
-
-    const handleWindowDrop = (e) => {
-      if (!e.defaultPrevented && e.dataTransfer?.files?.length > 0) {
-        const file = e.dataTransfer.files[0];
-        if (file && file.type.startsWith('image/')) {
-          e.preventDefault();
-          const reader = new FileReader();
-          reader.onload = (evt) => {
-            if (activeDeviceId) {
-              updateDevice(activeDeviceId, { screenshot: evt.target.result });
-            }
-          };
-          reader.readAsDataURL(file);
-        }
-      }
-    };
-
-    window.addEventListener('paste', handlePaste);
-    window.addEventListener('dragover', handleWindowDragOver);
-    window.addEventListener('drop', handleWindowDrop);
-
-    return () => {
-      window.removeEventListener('paste', handlePaste);
-      window.removeEventListener('dragover', handleWindowDragOver);
-      window.removeEventListener('drop', handleWindowDrop);
-    };
-  }, [activeDeviceId]);
-
-  // Switch Store (Updates canvas format and dimensions for target store)
+  // Switch Store (Updates active scene store & format)
   const setStore = (storeId) => {
-    setCurrentStore(storeId);
     const firstDevice = Object.values(DEVICE_CONFIGS).find(d => d.store === storeId);
-    if (firstDevice) {
-      setCurrentDeviceId(firstDevice.id);
-    }
+    const newDeviceId = firstDevice ? firstDevice.id : currentDeviceId;
+    setScenes(prev => prev.map(sc => {
+      if (sc.id === activeSceneIdRef.current) {
+        return {
+          ...sc,
+          store: storeId,
+          deviceId: newDeviceId
+        };
+      }
+      return sc;
+    }));
   };
 
-  // Switch Device Format
+  // Switch Canvas Format Dimensions (Updates active scene format and active phone mockup)
   const switchDevice = (deviceId) => {
     const targetConfig = DEVICE_CONFIGS[deviceId];
     if (!targetConfig) return;
 
-    setCurrentDeviceId(deviceId);
-    if (targetConfig.store !== currentStore) {
-      setCurrentStore(targetConfig.store);
-    }
+    setScenes(prev => prev.map(sc => {
+      if (sc.id === activeSceneIdRef.current) {
+        const updatedDevicesList = (sc.devicesList || []).map(d => {
+          if (d.id === activeDeviceIdRef.current) {
+            return {
+              ...d,
+              configId: deviceId,
+              frameScale: targetConfig.defaultScale || 1.8,
+              frameY: targetConfig.defaultY !== undefined ? targetConfig.defaultY : 320
+            };
+          }
+          return d;
+        });
 
-    if (activeDeviceId) {
-      updateDevice(activeDeviceId, {
-        configId: deviceId,
-        frameScale: targetConfig.defaultScale || 1.8,
-        frameY: targetConfig.defaultY !== undefined ? targetConfig.defaultY : 320
-      });
-    }
+        return {
+          ...sc,
+          deviceId,
+          store: targetConfig.store || sc.store,
+          devicesList: updatedDevicesList
+        };
+      }
+      return sc;
+    }));
   };
 
-  // Apply Quick Layout Presets (Multi-Phone & Single Phone)
+  // =========================================================================
+  // COMPLETE ORIGINAL PRESETS FROM COMMIT b3dc45f (ALL 20 PRESETS)
+  // =========================================================================
   const applyPreset = (presetType) => {
     const isFeature = currentDeviceId === 'play-feature-graphic';
     const isTablet = currentDeviceConfig.type.includes('tablet') || currentDeviceConfig.type === 'ipad';
     const isFold = currentDeviceConfig.type === 'android-foldable';
     const baseConfig = currentDeviceConfig.id;
 
+    // Feature Graphic Presets
     if (isFeature) {
       if (presetType === 'bannerRight') {
         setDevicesList([
@@ -840,37 +1074,102 @@ export default function App() {
   // Auto-fit zoom reset
   const fitZoomToScreen = () => {
     const availableHeight = window.innerHeight - 110;
-    const availableWidth = window.innerWidth - 420;
+    const availableWidth = window.innerWidth - 440;
     const scaleH = availableHeight / canvasHeight;
     const scaleW = availableWidth / canvasWidth;
     const calculatedScale = Math.min(scaleH, scaleW);
     setViewportZoom(Math.min(Math.max(calculatedScale, 0.08), 1.0));
   };
 
-  // Export High-Res Screenshot
+  // Auto-fit viewport zoom on window resize
+  useEffect(() => {
+    const handleResize = () => {
+      const availableHeight = window.innerHeight - 110;
+      const availableWidth = window.innerWidth - 440;
+      const scaleH = availableHeight / canvasHeight;
+      const scaleW = availableWidth / canvasWidth;
+      const calculatedScale = Math.min(scaleH, scaleW);
+      setViewportZoom(Math.min(Math.max(calculatedScale, 0.08), 1.0));
+    };
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [canvasHeight, canvasWidth]);
+
+  // Global Clipboard Paste Listener (Ctrl+V / Cmd+V for images onto active phone)
+  useEffect(() => {
+    const handlePaste = (e) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (item.type.indexOf('image') !== -1) {
+          const file = item.getAsFile();
+          if (file) {
+            e.preventDefault();
+            const reader = new FileReader();
+            reader.onload = (evt) => {
+              if (activeDeviceIdRef.current) {
+                updateDevice(activeDeviceIdRef.current, { screenshot: evt.target.result });
+              }
+            };
+            reader.readAsDataURL(file);
+            break;
+          }
+        }
+      }
+    };
+
+    const handleWindowDragOver = (e) => {
+      e.preventDefault();
+    };
+
+    const handleWindowDrop = (e) => {
+      if (!e.defaultPrevented && e.dataTransfer?.files?.length > 0) {
+        const file = e.dataTransfer.files[0];
+        if (file && file.type.startsWith('image/')) {
+          e.preventDefault();
+          const reader = new FileReader();
+          reader.onload = (evt) => {
+            if (activeDeviceIdRef.current) {
+              updateDevice(activeDeviceIdRef.current, { screenshot: evt.target.result });
+            }
+          };
+          reader.readAsDataURL(file);
+        }
+      }
+    };
+
+    window.addEventListener('paste', handlePaste);
+    window.addEventListener('dragover', handleWindowDragOver);
+    window.addEventListener('drop', handleWindowDrop);
+
+    return () => {
+      window.removeEventListener('paste', handlePaste);
+      window.removeEventListener('dragover', handleWindowDragOver);
+      window.removeEventListener('drop', handleWindowDrop);
+    };
+  }, [activeSceneId]);
+
+  // Single PNG Export (Original High-Res Engine)
   const handleExport = async () => {
     if (!canvasRef.current) return;
     setIsExporting(true);
 
     let exportHost = null;
     try {
-      // Ensure all web fonts are fully loaded before capturing
-      if (document.fonts) {
-        await document.fonts.ready;
-      }
+      if (document.fonts) await document.fonts.ready;
 
       const cloneNode = canvasRef.current.cloneNode(true);
-      
-      // Remove any UI overlays (focus badges, edit outlines) from exported graphic
       cloneNode.querySelectorAll('.studio-ui-only').forEach(el => el.remove());
+      cloneNode.querySelectorAll('.device-focus-outline').forEach(el => el.classList.remove('device-focus-outline'));
       cloneNode.querySelectorAll('.device-mockup-chassis').forEach(el => {
         const normalBorder = el.getAttribute('data-normal-border');
         const normalShadow = el.getAttribute('data-normal-shadow');
         if (normalBorder) el.style.border = normalBorder;
         if (normalShadow) el.style.boxShadow = normalShadow;
       });
-      
-      // Reset scale/transform on cloned canvas to render at native 1:1 pixel dimensions
       cloneNode.style.transform = 'none';
       cloneNode.style.boxShadow = 'none';
 
@@ -888,8 +1187,7 @@ export default function App() {
       exportHost.appendChild(cloneNode);
 
       document.body.appendChild(exportHost);
-      // Allow browser to perform full layout & font kerning pass
-      await new Promise(r => setTimeout(r, 200));
+      await new Promise(r => setTimeout(r, 180));
 
       const dataUrl = await toPng(cloneNode, {
         quality: 1,
@@ -906,18 +1204,7 @@ export default function App() {
       link.click();
     } catch (err) {
       console.error('Export error:', err);
-      alert('Could not export screenshot. Trying fallback...');
-      try {
-        if (document.fonts) await document.fonts.ready;
-        const dataUrl = await toPng(canvasRef.current, { quality: 1, pixelRatio: 1 });
-        const link = document.createElement('a');
-        link.download = `${currentDeviceId}-screenshot.png`;
-        link.href = dataUrl;
-        link.click();
-      } catch (fallbackErr) {
-        console.error('Fallback export error:', fallbackErr);
-        alert('Export failed.');
-      }
+      alert('Export failed. Please check screenshot images.');
     } finally {
       if (exportHost && exportHost.parentNode) {
         exportHost.parentNode.removeChild(exportHost);
@@ -925,6 +1212,459 @@ export default function App() {
       setIsExporting(false);
     }
   };
+
+  // Render a specific scene to a full-res data URL
+  const renderSceneToDataUrl = async (scene) => {
+    setActiveSceneId(scene.id);
+    await new Promise(r => setTimeout(r, 200));
+
+    if (!canvasRef.current) return null;
+    const cloneNode = canvasRef.current.cloneNode(true);
+    cloneNode.querySelectorAll('.studio-ui-only').forEach(el => el.remove());
+    cloneNode.querySelectorAll('.device-focus-outline').forEach(el => el.classList.remove('device-focus-outline'));
+    cloneNode.querySelectorAll('.device-mockup-chassis').forEach(el => {
+      const normalBorder = el.getAttribute('data-normal-border');
+      const normalShadow = el.getAttribute('data-normal-shadow');
+      if (normalBorder) el.style.border = normalBorder;
+      if (normalShadow) el.style.boxShadow = normalShadow;
+    });
+    cloneNode.style.transform = 'none';
+    cloneNode.style.boxShadow = 'none';
+
+    const sceneConfig = DEVICE_CONFIGS[scene.deviceId || 'iphone-6-7'] || DEVICE_CONFIGS['iphone-6-7'];
+    const scWidth = sceneConfig.width;
+    const scHeight = sceneConfig.height;
+
+    const exportHost = document.createElement('div');
+    exportHost.style.position = 'fixed';
+    exportHost.style.top = '0px';
+    exportHost.style.left = '0px';
+    exportHost.style.width = `${scWidth}px`;
+    exportHost.style.height = `${scHeight}px`;
+    exportHost.style.opacity = '0';
+    exportHost.style.zIndex = '-99999';
+    exportHost.style.pointerEvents = 'none';
+    exportHost.appendChild(cloneNode);
+    document.body.appendChild(exportHost);
+
+    try {
+      await new Promise(r => setTimeout(r, 140));
+      return await toPng(cloneNode, {
+        quality: 1,
+        pixelRatio: 1,
+        width: scWidth,
+        height: scHeight
+      });
+    } finally {
+      if (exportHost.parentNode) exportHost.parentNode.removeChild(exportHost);
+    }
+  };
+
+  // Export All as ZIP (Full Multi-Locale Bundle)
+  const handleExportAllZip = async () => {
+    setIsExportingZip(true);
+    const originalSceneId = activeSceneId;
+    const originalLocale = activeLocale;
+    const originalMode = viewMode;
+    setViewMode('editor');
+
+    try {
+      if (document.fonts) await document.fonts.ready;
+      const zip = new JSZip();
+      const storePrefix = currentStore === STORES.PLAY_STORE ? 'google-play' : 'app-store';
+      const rootFolderName = `${storePrefix}-${currentDeviceId}`;
+
+      const targetLocales = locales.length > 0 ? locales : [activeLocale];
+
+      for (const loc of targetLocales) {
+        setActiveLocale(loc);
+        await new Promise(r => setTimeout(r, 80));
+
+        const folder = targetLocales.length > 1
+          ? zip.folder(`${rootFolderName}/${loc}`)
+          : zip.folder(`${rootFolderName}-${loc}`);
+
+        for (let i = 0; i < scenes.length; i++) {
+          const sc = scenes[i];
+          const dataUrl = await renderSceneToDataUrl(sc);
+          if (dataUrl) {
+            const base64Data = dataUrl.replace(/^data:image\/png;base64,/, '');
+            folder.file(`screenshot-${String(i + 1).padStart(2, '0')}.png`, base64Data, { base64: true });
+          }
+        }
+      }
+
+      const content = await zip.generateAsync({ type: 'blob' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(content);
+      link.download = `${rootFolderName}-screenshots.zip`;
+      link.click();
+    } catch (err) {
+      console.error('Batch ZIP export error:', err);
+      alert('Batch export failed.');
+    } finally {
+      setActiveLocale(originalLocale);
+      setActiveSceneId(originalSceneId);
+      setViewMode(originalMode);
+      setIsExportingZip(false);
+    }
+  };
+
+  // Download All PNGs Individually
+  const handleExportAllPngs = async () => {
+    setIsExportingZip(true);
+    const originalSceneId = activeSceneId;
+    const originalMode = viewMode;
+    setViewMode('editor');
+
+    try {
+      if (document.fonts) await document.fonts.ready;
+      for (let i = 0; i < scenes.length; i++) {
+        const sc = scenes[i];
+        const dataUrl = await renderSceneToDataUrl(sc);
+        if (dataUrl) {
+          const link = document.createElement('a');
+          link.download = `screenshot-${String(i + 1).padStart(2, '0')}-${currentDeviceId}.png`;
+          link.href = dataUrl;
+          link.click();
+          await new Promise(r => setTimeout(r, 350));
+        }
+      }
+    } catch (err) {
+      console.error('Batch PNG export error:', err);
+      alert('Export failed.');
+    } finally {
+      setActiveSceneId(originalSceneId);
+      setViewMode(originalMode);
+      setIsExportingZip(false);
+    }
+  };
+
+  // Session Backup & Restore (Full JSON Export / Import)
+  const sessionFileInputRef = useRef(null);
+
+  const handleExportSession = () => {
+    try {
+      const now = new Date();
+      const pad = (n) => String(n).padStart(2, '0');
+      const datePart = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+      const timePart = `${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`;
+      const filename = `studio-session-${datePart}_${timePart}.json`;
+
+      const sessionData = {
+        app: 'app-store-studio-pro',
+        version: '1.0',
+        exportedAt: now.toISOString(),
+        currentStore,
+        currentDeviceId,
+        locales,
+        activeLocale,
+        activeSceneId,
+        activeDeviceId,
+        text,
+        availableFonts,
+        storeMetadata,
+        scenes
+      };
+
+      const jsonStr = JSON.stringify(sessionData, null, 2);
+      const blob = new Blob([jsonStr], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Failed to export session:', err);
+      alert('حدث خطأ أثناء تصدير الجلسة. يرجى المحاولة مرة أخرى.');
+    }
+  };
+
+  const handleImportButtonClick = () => {
+    if (sessionFileInputRef.current) {
+      sessionFileInputRef.current.value = '';
+      sessionFileInputRef.current.click();
+    }
+  };
+
+  const handleImportFileChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const confirmMessage = 'هل أنت متأكد من استيراد هذه الجلسة؟\n\nسيتم استبدال المشروع الحالي بالكامل بالبيانات والتصميمات الموجودة داخل الملف.';
+    if (!window.confirm(confirmMessage)) {
+      e.target.value = '';
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const content = event.target?.result;
+        if (!content || typeof content !== 'string') {
+          throw new Error('Empty file content');
+        }
+
+        const data = JSON.parse(content);
+
+        // Validation: must contain scenes array
+        if (!data || !Array.isArray(data.scenes) || data.scenes.length === 0) {
+          alert('ملف الجلسة غير صالح أو تالف. يجب أن يحتوي الملف على شرائح صالحة.');
+          return;
+        }
+
+        // Restore store and device format
+        if (data.currentStore) setCurrentStore(data.currentStore);
+        if (data.currentDeviceId) setCurrentDeviceId(data.currentDeviceId);
+
+        // Restore locales
+        if (Array.isArray(data.locales) && data.locales.length > 0) {
+          setLocales(data.locales);
+        }
+        if (data.activeLocale) {
+          setActiveLocale(data.activeLocale);
+        }
+
+        // Restore custom fonts
+        if (Array.isArray(data.availableFonts) && data.availableFonts.length > 0) {
+          setAvailableFonts(data.availableFonts);
+        }
+
+        // Restore store metadata
+        if (data.storeMetadata) {
+          setStoreMetadata(data.storeMetadata);
+        }
+
+        // Restore text formatting
+        if (data.text) {
+          setText(prev => ({ ...prev, ...data.text }));
+        }
+
+        const restoredScenes = (data.scenes || []).map(sc => ({
+          ...sc,
+          deviceId: sc.deviceId || data.currentDeviceId || 'iphone-6-7',
+          store: sc.store || data.currentStore || STORES.APP_STORE,
+          textStyle: sc.textStyle || createInitialTextStyle()
+        }));
+        setScenes(restoredScenes);
+
+        // Reset history stack on imported session
+        setHistory([{
+          scenes: restoredScenes,
+          activeSceneId: targetSceneId
+        }]);
+        setHistoryIndex(0);
+
+        // Restore active scene & device
+        const targetSceneId = (data.activeSceneId && data.scenes.some(s => s.id === data.activeSceneId))
+          ? data.activeSceneId
+          : data.scenes[0].id;
+        setActiveSceneId(targetSceneId);
+
+        const targetScene = data.scenes.find(s => s.id === targetSceneId) || data.scenes[0];
+        const targetDeviceId = (data.activeDeviceId && targetScene?.devicesList?.some(d => d.id === data.activeDeviceId))
+          ? data.activeDeviceId
+          : targetScene?.devicesList?.[0]?.id || 'device-1';
+        setActiveDeviceId(targetDeviceId);
+
+        alert('تم استيراد الجلسة واستعادة كافة الشرائح والصور والنصوص بنجاح! 🎉');
+      } catch (err) {
+        console.error('Failed to parse or restore session:', err);
+        alert('حدث خطأ أثناء قراءة الملف. يرجى التأكد من اختيار ملف JSON سليم تم تصديره من الأداة.');
+      } finally {
+        if (e.target) e.target.value = '';
+      }
+    };
+
+    reader.onerror = () => {
+      alert('تعذر قراءة الملف المختار.');
+      if (e.target) e.target.value = '';
+    };
+
+    reader.readAsText(file);
+  };
+
+  // Scene Operations for Multi-Slide Strip
+  const handleAddScene = () => {
+    const newId = `scene-${Date.now()}`;
+    const newScene = createInitialScene(newId, scenes.length + 1, currentDeviceId, currentStore);
+    setScenes(prev => [...prev, newScene]);
+    setActiveSceneId(newId);
+    setViewMode('editor');
+  };
+
+  const handleDuplicateScene = (sceneId) => {
+    const toDup = scenes.find(s => s.id === sceneId);
+    if (!toDup) return;
+    const newId = `scene-${Date.now()}`;
+    const duplicated = {
+      ...toDup,
+      id: newId,
+      deviceId: toDup.deviceId || currentDeviceId,
+      store: toDup.store || currentStore,
+      textStyle: toDup.textStyle ? { ...toDup.textStyle } : createInitialTextStyle(),
+      bgState: { ...toDup.bgState },
+      devicesList: toDup.devicesList.map(d => ({ ...d, id: `dev-${Date.now()}-${Math.random()}` }))
+    };
+    setScenes(prev => [...prev, duplicated]);
+    setActiveSceneId(newId);
+    setViewMode('editor');
+  };
+
+  // Action: Apply Canvas Format Dimensions to All Slides
+  const handleApplyFormatToAll = () => {
+    const targetDeviceId = currentDeviceId;
+    const targetStore = currentStore;
+    setScenes(prev => prev.map(sc => ({
+      ...sc,
+      deviceId: targetDeviceId,
+      store: targetStore
+    })));
+    alert('تم تطبيق مقاس الكانفاس وأبعاده على كافة الشرائح بنجاح! ✨');
+  };
+
+  // Action: Apply Background to All Slides
+  const handleApplyBgToAll = () => {
+    const currentBg = activeScene.bgState;
+    setScenes(prev => prev.map(sc => ({
+      ...sc,
+      bgState: { ...currentBg }
+    })));
+    alert('تم تطبيق الخلفية الحالية على كافة الشرائح بنجاح! ✨');
+  };
+
+  // Action: Apply Font & Style to All Slides
+  const handleApplyFontToAll = () => {
+    const styleToApply = {
+      titleSize: text.titleSize,
+      titleColor: text.titleColor,
+      subtitleSize: text.subtitleSize,
+      subtitleColor: text.subtitleColor,
+      fontFamily: text.fontFamily,
+      offsetY: text.offsetY,
+      align: text.align
+    };
+    setScenes(prev => prev.map(sc => ({
+      ...sc,
+      textStyle: { ...(sc.textStyle || createInitialTextStyle()), ...styleToApply }
+    })));
+    alert('تم تطبيق الخط والتنسيق الحالي على كافة الشرائح بنجاح! ✨');
+  };
+
+  // Keyboard Nudge & Delete for Selected Phone Device
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      const tag = document.activeElement?.tagName?.toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || document.activeElement?.isContentEditable) {
+        return;
+      }
+
+      const isCmdOrCtrl = e.metaKey || e.ctrlKey;
+
+      // Undo / Redo Shortcuts
+      if (isCmdOrCtrl && e.key.toLowerCase() === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        handleUndo();
+        return;
+      }
+      if (isCmdOrCtrl && (e.key.toLowerCase() === 'y' || (e.key.toLowerCase() === 'z' && e.shiftKey))) {
+        e.preventDefault();
+        handleRedo();
+        return;
+      }
+
+      const currentDevId = activeDeviceIdRef.current;
+      const curSceneId = activeSceneIdRef.current;
+      if (!currentDevId || !curSceneId) return;
+
+      const isShift = e.shiftKey;
+      const step = isShift ? 10 : 2;
+
+      if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
+        e.preventDefault();
+        let dx = 0;
+        let dy = 0;
+        if (e.key === 'ArrowLeft') dx = -step;
+        if (e.key === 'ArrowRight') dx = step;
+        if (e.key === 'ArrowUp') dy = -step;
+        if (e.key === 'ArrowDown') dy = step;
+
+        setScenes(prevScenes => prevScenes.map(sc => {
+          if (sc.id === curSceneId) {
+            return {
+              ...sc,
+              devicesList: (sc.devicesList || []).map(d => {
+                if (d.id === currentDevId) {
+                  return {
+                    ...d,
+                    frameX: (d.frameX || 0) + dx,
+                    frameY: (d.frameY || 0) + dy
+                  };
+                }
+                return d;
+              })
+            };
+          }
+          return sc;
+        }));
+      } else if (e.key === 'Delete' || e.key === 'Backspace') {
+        setScenes(prevScenes => prevScenes.map(sc => {
+          if (sc.id === curSceneId && sc.devicesList && sc.devicesList.length > 1) {
+            const nextList = sc.devicesList.filter(d => d.id !== currentDevId);
+            if (activeDeviceIdRef.current === currentDevId) {
+              setActiveDeviceId(nextList[0]?.id || null);
+            }
+            return {
+              ...sc,
+              devicesList: nextList
+            };
+          }
+          return sc;
+        }));
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  const handleDeleteScene = (sceneId) => {
+    if (scenes.length <= 1) return;
+    setScenes(prev => prev.filter(s => s.id !== sceneId));
+    if (activeSceneId === sceneId) {
+      const rem = scenes.filter(s => s.id !== sceneId);
+      setActiveSceneId(rem[0]?.id || 'scene-1');
+    }
+  };
+
+  const handleMoveScene = (fromIndex, toIndex) => {
+    if (toIndex < 0 || toIndex >= scenes.length) return;
+    setScenes(prev => {
+      const copy = [...prev];
+      const [moved] = copy.splice(fromIndex, 1);
+      copy.splice(toIndex, 0, moved);
+      return copy;
+    });
+  };
+
+  // Store Metadata for Simulator
+  const [storeMetadata, setStoreMetadata] = useState({
+    appName: 'App Name',
+    subtitle: { 'en-US': 'Your app subtitle or slogan', 'ar-SA': 'وصف قصير وجذاب للتطبيق' },
+    developer: 'Developer Studio',
+    category: 'Productivity',
+    rating: 4.9,
+    ratingCount: '14.2K Ratings',
+    ageRating: '4+',
+    description: {
+      'en-US': 'Supercharge your daily routine with intuitive navigation and stunning design.\n\n• High performance\n• Cloud sync\n• 100% Secure',
+      'ar-SA': 'ارتقِ بتجربتك اليومية مع تصميم أنيق وسرعة استثنائية.\n\n• أداء فائق\n• مزامنة سحابية\n• حماية تامة'
+    },
+    iconUrl: null
+  });
 
   const state = {
     currentStore,
@@ -952,72 +1692,336 @@ export default function App() {
     setText,
     availableFonts,
     registerCustomFont,
-    applyPreset
+    applyPreset,
+    // Multi-Slide Batch Actions
+    scenes,
+    onApplyBgToAll: handleApplyBgToAll,
+    onApplyFontToAll: handleApplyFontToAll,
+    onApplyFormatToAll: handleApplyFormatToAll,
+    // Locales
+    locales,
+    activeLocale,
+    onSetActiveLocale: setActiveLocale,
+    onOpenLocaleModal: () => setIsLocaleModalOpen(true)
   };
 
   return (
     <div className="app-layout">
-      {/* Sidebar Controls */}
+      {/* 1. ORIGINAL SIDEBAR CONTROLS (100% MATCHING b3dc45f) */}
       <Sidebar state={state} />
 
-      {/* Main Studio Area */}
+      {/* 2. MAIN STUDIO AREA */}
       <div className="studio-area">
         {/* Top Header Toolbar */}
         <div className="top-header">
+          {/* Left: Branding & Compact Language Switcher */}
           <div className="app-branding">
             <div className="store-pill-indicator">
-              {currentStore === STORES.PLAY_STORE ? '🤖 Google Play Store' : '🍎 Apple App Store'}
+              {currentStore === STORES.PLAY_STORE ? '🤖 Play Store' : '🍎 App Store'}
             </div>
             <span className="app-title">{currentDeviceConfig.name}</span>
             <span className="badge">
-              {canvasWidth} × {canvasHeight} px
+              {canvasWidth} × {canvasHeight}
             </span>
-          </div>
 
-          {/* Zoom Controls */}
-          <div className="zoom-controls">
-            <button className="icon-btn" onClick={() => setViewportZoom(z => Math.max(z - 0.05, 0.05))} title="Zoom Out"><ZoomOut size={16} /></button>
-            <span className="zoom-val">{Math.round(viewportZoom * 100)}%</span>
-            <button className="icon-btn" onClick={() => setViewportZoom(z => Math.min(z + 0.05, 1.0))} title="Zoom In"><ZoomIn size={16} /></button>
-            <button className="icon-btn" onClick={fitZoomToScreen} title="Fit Screen"><Maximize2 size={14} /></button>
-            
-            {/* Quick Zoom Preset Buttons */}
-            <div className="quick-zoom-presets">
-              {[0.15, 0.25, 0.5, 1.0].map(z => (
-                <button
-                  key={z}
-                  className={`zoom-preset-btn ${Math.abs(viewportZoom - z) < 0.03 ? 'active' : ''}`}
-                  onClick={() => setViewportZoom(z)}
-                >
-                  {z * 100}%
-                </button>
-              ))}
+            {/* Compact Language Selector Dropdown */}
+            <div className="header-dropdown-container" ref={langDropdownRef}>
+              <button 
+                className={`header-pill-dropdown-btn ${isLangDropdownOpen ? 'active' : ''}`}
+                onClick={() => setIsLangDropdownOpen(prev => !prev)}
+                title="Change or manage languages"
+              >
+                <span className="lang-flag">{currentLocaleObj.flag}</span>
+                <span className="lang-code">{activeLocale.split('-')[0].toUpperCase()}</span>
+                <ChevronDown size={12} className={`dropdown-chevron ${isLangDropdownOpen ? 'open' : ''}`} />
+              </button>
+
+              {isLangDropdownOpen && (
+                <div className="header-dropdown-menu lang-dropdown-menu">
+                  <div className="dropdown-menu-header">Active Languages</div>
+                  <div className="dropdown-menu-list">
+                    {locales.map(code => {
+                      const loc = SUPPORTED_LOCALES.find(l => l.code === code) || { flag: '🌐', name: code };
+                      const isSelected = activeLocale === code;
+                      return (
+                        <button
+                          key={code}
+                          className={`dropdown-menu-item ${isSelected ? 'selected' : ''}`}
+                          onClick={() => {
+                            setActiveLocale(code);
+                            setIsLangDropdownOpen(false);
+                          }}
+                        >
+                          <span className="item-flag">{loc.flag}</span>
+                          <span className="item-label">{loc.name}</span>
+                          <span className="item-code">{code}</span>
+                          {isSelected && <span className="item-check">✓</span>}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="dropdown-menu-divider" />
+                  <button 
+                    className="dropdown-menu-action"
+                    onClick={() => {
+                      setIsLocaleModalOpen(true);
+                      setIsLangDropdownOpen(false);
+                    }}
+                  >
+                    <Globe size={13} />
+                    <span>+ Manage Languages...</span>
+                  </button>
+                </div>
+              )}
             </div>
           </div>
 
-          <button 
-            className={`export-btn ${isExporting ? 'exporting' : ''}`} 
-            onClick={handleExport}
-            disabled={isExporting}
-          >
-            <Download size={18} />
-            {isExporting ? 'Generating PNG...' : `Export ${canvasWidth}×${canvasHeight}`}
-          </button>
-        </div>
+          {/* Center: Clean 3-Mode Switcher */}
+          <div className="mode-switcher-segmented">
+            <button
+              className={`mode-btn ${viewMode === 'editor' ? 'active' : ''}`}
+              onClick={() => handleSwitchMode('editor')}
+            >
+              Single Slide
+            </button>
+            <button
+              className={`mode-btn ${viewMode === 'strip' ? 'active' : ''}`}
+              onClick={() => handleSwitchMode('strip')}
+            >
+              Multi-Strip ({scenes.length})
+            </button>
+            <button
+              className={`mode-btn ${viewMode === 'mockup' ? 'active' : ''}`}
+              onClick={() => handleSwitchMode('mockup')}
+            >
+              Store Page
+            </button>
+          </div>
 
-        {/* Studio Stage with Clean Scaled View */}
-        <div className="clean-preview-area">
-          <div
-            style={{
-              transform: `scale(${viewportZoom})`,
-              transformOrigin: 'center center',
-              transition: 'transform 0.15s ease-out'
-            }}
-          >
-            <Canvas ref={canvasRef} state={state} />
+          {/* Right: Undo/Redo, Project Dropdown & Contextual Export */}
+          <div className="top-header-right-actions">
+            {/* Undo / Redo Actions */}
+            <div className="undo-redo-btn-group">
+              <button 
+                className="header-icon-btn" 
+                onClick={handleUndo} 
+                disabled={!canUndo} 
+                title="Undo (⌘Z / Ctrl+Z)"
+              >
+                <Undo2 size={15} />
+              </button>
+              <button 
+                className="header-icon-btn" 
+                onClick={handleRedo} 
+                disabled={!canRedo} 
+                title="Redo (⌘Y / ⌘⇧Z / Ctrl+Y)"
+              >
+                <Redo2 size={15} />
+              </button>
+            </div>
+
+            {/* Project / Session Dropdown */}
+            <div className="header-dropdown-container" ref={projectDropdownRef}>
+              <button 
+                className={`header-action-dropdown-btn ${isProjectDropdownOpen ? 'active' : ''}`}
+                onClick={() => setIsProjectDropdownOpen(prev => !prev)}
+                title="Project Session (Export / Import)"
+              >
+                <FolderDown size={14} />
+                <span>Project</span>
+                <ChevronDown size={12} className={`dropdown-chevron ${isProjectDropdownOpen ? 'open' : ''}`} />
+              </button>
+
+              {isProjectDropdownOpen && (
+                <div className="header-dropdown-menu project-dropdown-menu">
+                  <div className="dropdown-menu-header">Project Session</div>
+                  <button 
+                    className="dropdown-menu-item project-item"
+                    onClick={() => {
+                      handleExportSession();
+                      setIsProjectDropdownOpen(false);
+                    }}
+                  >
+                    <div className="item-icon-circle export-icon">
+                      <FileDown size={14} />
+                    </div>
+                    <div className="item-text-group">
+                      <span className="item-title">Export Session (.json)</span>
+                      <span className="item-subtitle">Download full project, images & texts</span>
+                    </div>
+                  </button>
+
+                  <button 
+                    className="dropdown-menu-item project-item"
+                    onClick={() => {
+                      handleImportButtonClick();
+                      setIsProjectDropdownOpen(false);
+                    }}
+                  >
+                    <div className="item-icon-circle import-icon">
+                      <FileUp size={14} />
+                    </div>
+                    <div className="item-text-group">
+                      <span className="item-title">Import Session (.json)</span>
+                      <span className="item-subtitle">Restore project from JSON backup</span>
+                    </div>
+                  </button>
+                </div>
+              )}
+
+              <input 
+                type="file" 
+                ref={sessionFileInputRef} 
+                onChange={handleImportFileChange} 
+                accept=".json,application/json" 
+                style={{ display: 'none' }} 
+              />
+            </div>
+
+            {/* Export Buttons */}
+            {viewMode === 'editor' && (
+              <button 
+                className={`export-btn ${isExporting ? 'exporting' : ''}`} 
+                onClick={handleExport}
+                disabled={isExporting}
+              >
+                <Download size={16} />
+                <span>{isExporting ? 'Generating...' : 'Export PNG'}</span>
+              </button>
+            )}
+
+            {viewMode === 'strip' && (
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button 
+                  className="export-btn secondary" 
+                  onClick={handleExportAllPngs}
+                  disabled={isExportingZip}
+                >
+                  <Download size={15} />
+                  <span>Download All</span>
+                </button>
+                <button 
+                  className="export-btn" 
+                  onClick={handleExportAllZip}
+                  disabled={isExportingZip}
+                >
+                  <FolderArchive size={15} />
+                  <span>{isExportingZip ? 'Exporting...' : 'Export ZIP'}</span>
+                </button>
+              </div>
+            )}
+
+            {viewMode === 'mockup' && (
+              <button 
+                className="export-btn" 
+                onClick={() => setViewMode('editor')}
+              >
+                <span>Back to Editor</span>
+              </button>
+            )}
           </div>
         </div>
+
+        {/* Viewport Modes */}
+        {viewMode === 'editor' && (
+          <div className="clean-preview-area">
+            <div
+              style={{
+                transform: `scale(${viewportZoom})`,
+                transformOrigin: 'center center',
+                transition: 'transform 0.15s ease-out'
+              }}
+            >
+              <Canvas ref={canvasRef} state={state} />
+            </div>
+
+            {/* Floating Zoom Dock (Figma / Canva Style) */}
+            <div className="floating-zoom-dock">
+              <button className="zoom-dock-btn" onClick={() => setViewportZoom(z => Math.max(z - 0.05, 0.05))} title="Zoom Out">
+                <ZoomOut size={15} />
+              </button>
+              <span className="zoom-dock-val">{Math.round(viewportZoom * 100)}%</span>
+              <button className="zoom-dock-btn" onClick={() => setViewportZoom(z => Math.min(z + 0.05, 1.0))} title="Zoom In">
+                <ZoomIn size={15} />
+              </button>
+              <div className="zoom-dock-divider" />
+              <button className="zoom-dock-btn" onClick={fitZoomToScreen} title="Fit Screen">
+                <Maximize2 size={13} />
+              </button>
+              
+              <div className="zoom-dock-presets">
+                {[0.15, 0.25, 0.5, 1.0].map(z => (
+                  <button
+                    key={z}
+                    className={`zoom-preset-chip ${Math.abs(viewportZoom - z) < 0.03 ? 'active' : ''}`}
+                    onClick={() => setViewportZoom(z)}
+                  >
+                    {z * 100}%
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {viewMode === 'strip' && (
+          <div className="strip-manager-viewport">
+            <StripManager
+              scenes={scenes}
+              activeSceneId={activeSceneId}
+              onSelectScene={(id) => {
+                setActiveSceneId(id);
+                setViewMode('editor');
+              }}
+              onAddScene={handleAddScene}
+              onDuplicateScene={handleDuplicateScene}
+              onDeleteScene={handleDeleteScene}
+              onMoveScene={handleMoveScene}
+              activeLocale={activeLocale}
+              renderedPreviews={renderedPreviews}
+              onExportAllZip={handleExportAllZip}
+              onExportAllPngs={handleExportAllPngs}
+              isExportingZip={isExportingZip}
+              currentDeviceConfig={currentDeviceConfig}
+              canvasWidth={canvasWidth}
+              canvasHeight={canvasHeight}
+            />
+          </div>
+        )}
+
+        {viewMode === 'mockup' && (
+          <div className="store-mockup-viewport">
+            <StoreMockup
+              store={currentStore}
+              storeMetadata={storeMetadata}
+              scenes={scenes}
+              activeLocale={activeLocale}
+              renderedPreviews={renderedPreviews}
+              onSelectScene={(id) => {
+                setActiveSceneId(id);
+                setViewMode('editor');
+              }}
+              onSwitchToEditor={() => setViewMode('editor')}
+              currentDeviceConfig={currentDeviceConfig}
+              canvasWidth={canvasWidth}
+              canvasHeight={canvasHeight}
+            />
+          </div>
+        )}
       </div>
+
+      {/* World Languages Modal */}
+      <LocaleManagerModal
+        isOpen={isLocaleModalOpen}
+        onClose={() => setIsLocaleModalOpen(false)}
+        locales={locales}
+        activeLocale={activeLocale}
+        onSetActiveLocale={setActiveLocale}
+        onAddLocale={handleAddLocale}
+        onRemoveLocale={handleRemoveLocale}
+        scenes={scenes}
+        onUpdateSceneText={handleUpdateSceneText}
+      />
     </div>
   );
 }

@@ -13,7 +13,8 @@ import {
   Trash2,
   Layers,
   ArrowUp,
-  ArrowDown
+  ArrowDown,
+  Globe
 } from 'lucide-react';
 import { HexColorPicker } from 'react-colorful';
 import { STORES, DEVICE_CONFIGS, FRAME_FINISHES, STORE_GRADIENT_PRESETS } from '../constants/storeConfigs';
@@ -94,7 +95,15 @@ export default function Sidebar({ state }) {
     setText,
     availableFonts,
     registerCustomFont,
-    applyPreset
+    applyPreset,
+    scenes = [],
+    onApplyBgToAll,
+    onApplyFontToAll,
+    onApplyFormatToAll,
+    locales = ['en-US'],
+    activeLocale = 'en-US',
+    onSetActiveLocale,
+    onOpenLocaleModal
   } = state;
 
   const handleFileUpload = (e, callback) => {
@@ -176,6 +185,17 @@ export default function Sidebar({ state }) {
             </button>
           ))}
         </div>
+        {scenes && scenes.length > 1 && (
+          <div className="mt-2">
+            <button
+              className="btn-apply-all-wide"
+              onClick={onApplyFormatToAll}
+              title="Apply this exact canvas dimension format to every slide in the project"
+            >
+              <Copy size={12} /> Apply Format to All Slides
+            </button>
+          </div>
+        )}
       </div>
 
       {/* 3. NAVIGATION TABS */}
@@ -886,6 +906,19 @@ export default function Sidebar({ state }) {
                 )}
               </div>
             )}
+
+            {/* Action: Apply Background to All Slides */}
+            {scenes && scenes.length > 1 && (
+              <div className="border-top-subtle mt-4 pt-3">
+                <button
+                  className="btn-apply-all-wide"
+                  onClick={onApplyBgToAll}
+                  title="Apply this exact background styling to every slide in the project"
+                >
+                  <Copy size={13} /> Apply Background to All Slides
+                </button>
+              </div>
+            )}
           </div>
         )}
 
@@ -894,6 +927,38 @@ export default function Sidebar({ state }) {
         {/* ========================================================================= */}
         {activeTab === 'text' && (
           <div className="section-group">
+            {/* Store Languages Selector & Modal Trigger */}
+            <div className="flex-between mb-2">
+              <span className="section-title mb-0" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Globe size={14} color="var(--accent)" /> Languages ({locales.length})
+              </span>
+              <button 
+                className="add-phone-btn"
+                onClick={() => onOpenLocaleModal && onOpenLocaleModal()}
+                title="Add world languages via modal"
+                type="button"
+              >
+                + Add Language
+              </button>
+            </div>
+
+            <div className="multi-device-tab-bar mb-3">
+              {locales.map(code => {
+                const isArabic = code.startsWith('ar');
+                const label = isArabic ? '🇸🇦 العربية' : code === 'en-US' ? '🇺🇸 English' : code;
+                return (
+                  <button
+                    key={code}
+                    className={`multi-device-tab ${activeLocale === code ? 'active' : ''}`}
+                    onClick={() => onSetActiveLocale && onSetActiveLocale(code)}
+                    type="button"
+                  >
+                    <span>{label}</span>
+                  </button>
+                );
+              })}
+            </div>
+
             {/* Optional Tagline / Badge Text */}
             <h3 className="section-title">Badge Tagline (Optional)</h3>
             <input
@@ -902,6 +967,7 @@ export default function Sidebar({ state }) {
               onChange={(e) => setText(p => ({ ...p, badgeText: e.target.value }))}
               placeholder="e.g. Featured on Google Play / #1 App"
               className="num-input mb-3"
+              dir={activeLocale?.startsWith('ar') ? 'rtl' : 'ltr'}
             />
 
             {/* Title Text */}
@@ -912,6 +978,7 @@ export default function Sidebar({ state }) {
               placeholder="e.g. Experience The Next Gen App"
               className="text-input"
               rows={2}
+              dir={activeLocale?.startsWith('ar') ? 'rtl' : 'ltr'}
             />
 
             <div className="row-2 mt-3">
@@ -941,6 +1008,7 @@ export default function Sidebar({ state }) {
               placeholder="e.g. Fast, secure and designed for your Android devices."
               className="text-input"
               rows={2}
+              dir={activeLocale?.startsWith('ar') ? 'rtl' : 'ltr'}
             />
 
             <div className="row-2 mt-3">
@@ -1010,6 +1078,19 @@ export default function Sidebar({ state }) {
                   ))}
                 </div>
               </div>
+
+              {/* Action: Apply Font & Style to All Slides */}
+              {scenes && scenes.length > 1 && (
+                <div className="border-top-subtle mt-4 pt-3">
+                  <button
+                    className="btn-apply-all-wide"
+                    onClick={onApplyFontToAll}
+                    title="Apply this typography, font sizes, colors, alignment & Y-position to every slide"
+                  >
+                    <Copy size={13} /> Apply Font & Style to All Slides
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         )}

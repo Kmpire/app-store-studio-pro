@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "html-to-image": "^1.11.13",
+    "jszip": "^3.10.1",
     "lucide-react": "^1.30.0",
     "react": "^19.2.8",
     "react-colorful": "^5.8.0",
