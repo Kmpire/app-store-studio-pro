@@ -1,12 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Download, ZoomIn, ZoomOut, Maximize2, FolderArchive, Globe, FileDown, FileUp, FolderDown, ChevronDown, Undo2, Redo2 } from 'lucide-react';
-import { toPng } from 'html-to-image';
+import { ZoomIn, ZoomOut, Maximize2, Globe, FileDown, FileUp, FolderDown, ChevronDown, Undo2, Redo2 } from 'lucide-react';
+import { toPng, toJpeg } from 'html-to-image';
 import JSZip from 'jszip';
 import Sidebar from './components/Sidebar';
 import Canvas from './components/Canvas';
 import StripManager from './components/StripManager';
 import StoreMockup from './components/StoreMockup';
 import LocaleManagerModal from './components/LocaleManagerModal';
+import ExportDropdown from './components/ExportDropdown';
 import { STORES, DEVICE_CONFIGS } from './constants/storeConfigs';
 import { SUPPORTED_LOCALES } from './constants/goldieLayouts';
 import './App.css';
@@ -102,6 +103,7 @@ export default function App() {
   const [scenes, setScenes] = useState(() => [createInitialScene('scene-1', 1)]);
   const [activeSceneId, setActiveSceneId] = useState('scene-1');
   const activeScene = scenes.find(s => s.id === activeSceneId) || scenes[0];
+  const activeSceneIndex = scenes.findIndex(s => s.id === activeSceneId);
 
   // History State for Undo / Redo
   const [history, setHistory] = useState(() => [{
@@ -377,8 +379,25 @@ export default function App() {
     { name: 'Bebas Neue (Impact)', value: 'Bebas Neue' }
   ]);
 
+  // Store Metadata for Simulator
+  const [storeMetadata, setStoreMetadata] = useState({
+    appName: 'App Name',
+    subtitle: { 'en-US': 'Your app subtitle or slogan', 'ar-SA': 'وصف قصير وجذاب للتطبيق' },
+    developer: 'Developer Studio',
+    category: 'Productivity',
+    rating: 4.9,
+    ratingCount: '14.2K Ratings',
+    ageRating: '4+',
+    description: {
+      'en-US': 'Supercharge your daily routine with intuitive navigation and stunning design.\n\n• High performance\n• Cloud sync\n• 100% Secure',
+      'ar-SA': 'ارتقِ بتجربتك اليومية مع تصميم أنيق وسرعة استثنائية.\n\n• أداء فائق\n• مزامنة سحابية\n• حماية تامة'
+    },
+    iconUrl: null
+  });
+
   const [isExporting, setIsExporting] = useState(false);
   const [isExportingZip, setIsExportingZip] = useState(false);
+  const [exportStatusText, setExportStatusText] = useState('');
   const [renderedPreviews] = useState({});
 
   // Instant 0ms Mode Switching (no main thread freeze!)
@@ -1152,14 +1171,23 @@ export default function App() {
     };
   }, [activeSceneId]);
 
-  // Single PNG Export (Original High-Res Engine)
-  const handleExport = async () => {
-    if (!canvasRef.current) return;
+  // Multi-Format Single Slide Export (PNG / JPG)
+  const handleExport = async (format = 'png') => {
     setIsExporting(true);
+    const isJpg = format === 'jpg' || format === 'jpeg';
+    const ext = isJpg ? 'jpg' : 'png';
+    setExportStatusText(`Exporting ${ext.toUpperCase()}...`);
+
+    const originalMode = viewMode;
+    if (viewMode !== 'editor') {
+      setViewMode('editor');
+      await new Promise(r => setTimeout(r, 140));
+    }
 
     let exportHost = null;
     try {
       if (document.fonts) await document.fonts.ready;
+      if (!canvasRef.current) return;
 
       const cloneNode = canvasRef.current.cloneNode(true);
       cloneNode.querySelectorAll('.studio-ui-only').forEach(el => el.remove());
@@ -1189,17 +1217,29 @@ export default function App() {
       document.body.appendChild(exportHost);
       await new Promise(r => setTimeout(r, 180));
 
-      const dataUrl = await toPng(cloneNode, {
-        quality: 1,
-        pixelRatio: 1,
-        width: canvasWidth,
-        height: canvasHeight,
-        cacheBust: false
-      });
+      let dataUrl;
+      if (isJpg) {
+        dataUrl = await toJpeg(cloneNode, {
+          quality: 0.95,
+          pixelRatio: 1,
+          width: canvasWidth,
+          height: canvasHeight,
+          backgroundColor: '#ffffff',
+          cacheBust: false
+        });
+      } else {
+        dataUrl = await toPng(cloneNode, {
+          quality: 1,
+          pixelRatio: 1,
+          width: canvasWidth,
+          height: canvasHeight,
+          cacheBust: false
+        });
+      }
 
       const storePrefix = currentStore === STORES.PLAY_STORE ? 'google-play' : 'apple-app-store';
       const link = document.createElement('a');
-      link.download = `${storePrefix}-${currentDeviceId}-${activeDeviceState.orientation}-${canvasWidth}x${canvasHeight}.png`;
+      link.download = `${storePrefix}-${currentDeviceId}-${activeDeviceState.orientation}-${canvasWidth}x${canvasHeight}.${ext}`;
       link.href = dataUrl;
       link.click();
     } catch (err) {
@@ -1209,12 +1249,16 @@ export default function App() {
       if (exportHost && exportHost.parentNode) {
         exportHost.parentNode.removeChild(exportHost);
       }
+      if (originalMode !== 'editor') {
+        setViewMode(originalMode);
+      }
       setIsExporting(false);
+      setExportStatusText('');
     }
   };
 
-  // Render a specific scene to a full-res data URL
-  const renderSceneToDataUrl = async (scene) => {
+  // Render a specific scene to a full-res data URL (PNG or JPG)
+  const renderSceneToDataUrl = async (scene, format = 'png') => {
     setActiveSceneId(scene.id);
     await new Promise(r => setTimeout(r, 200));
 
@@ -1249,6 +1293,16 @@ export default function App() {
 
     try {
       await new Promise(r => setTimeout(r, 140));
+      const isJpg = format === 'jpg' || format === 'jpeg';
+      if (isJpg) {
+        return await toJpeg(cloneNode, {
+          quality: 0.95,
+          pixelRatio: 1,
+          width: scWidth,
+          height: scHeight,
+          backgroundColor: '#ffffff'
+        });
+      }
       return await toPng(cloneNode, {
         quality: 1,
         pixelRatio: 1,
@@ -1260,9 +1314,12 @@ export default function App() {
     }
   };
 
-  // Export All as ZIP (Full Multi-Locale Bundle)
-  const handleExportAllZip = async () => {
+  // Export All as ZIP (Full Multi-Locale Bundle with PNG or JPG)
+  const handleExportAllZip = async (format = 'png') => {
+    const isJpg = format === 'jpg' || format === 'jpeg';
+    const ext = isJpg ? 'jpg' : 'png';
     setIsExportingZip(true);
+    setExportStatusText(`Exporting ${ext.toUpperCase()} ZIP...`);
     const originalSceneId = activeSceneId;
     const originalLocale = activeLocale;
     const originalMode = viewMode;
@@ -1286,10 +1343,10 @@ export default function App() {
 
         for (let i = 0; i < scenes.length; i++) {
           const sc = scenes[i];
-          const dataUrl = await renderSceneToDataUrl(sc);
+          const dataUrl = await renderSceneToDataUrl(sc, ext);
           if (dataUrl) {
-            const base64Data = dataUrl.replace(/^data:image\/png;base64,/, '');
-            folder.file(`screenshot-${String(i + 1).padStart(2, '0')}.png`, base64Data, { base64: true });
+            const base64Data = dataUrl.split(',')[1];
+            folder.file(`screenshot-${String(i + 1).padStart(2, '0')}.${ext}`, base64Data, { base64: true });
           }
         }
       }
@@ -1297,8 +1354,9 @@ export default function App() {
       const content = await zip.generateAsync({ type: 'blob' });
       const link = document.createElement('a');
       link.href = URL.createObjectURL(content);
-      link.download = `${rootFolderName}-screenshots.zip`;
+      link.download = `${rootFolderName}-${ext.toUpperCase()}-screenshots.zip`;
       link.click();
+      URL.revokeObjectURL(link.href);
     } catch (err) {
       console.error('Batch ZIP export error:', err);
       alert('Batch export failed.');
@@ -1307,12 +1365,16 @@ export default function App() {
       setActiveSceneId(originalSceneId);
       setViewMode(originalMode);
       setIsExportingZip(false);
+      setExportStatusText('');
     }
   };
 
-  // Download All PNGs Individually
-  const handleExportAllPngs = async () => {
+  // Download All Files Individually (PNG or JPG)
+  const handleDownloadAll = async (format = 'png') => {
+    const isJpg = format === 'jpg' || format === 'jpeg';
+    const ext = isJpg ? 'jpg' : 'png';
     setIsExportingZip(true);
+    setExportStatusText(`Downloading ${ext.toUpperCase()}s...`);
     const originalSceneId = activeSceneId;
     const originalMode = viewMode;
     setViewMode('editor');
@@ -1321,24 +1383,27 @@ export default function App() {
       if (document.fonts) await document.fonts.ready;
       for (let i = 0; i < scenes.length; i++) {
         const sc = scenes[i];
-        const dataUrl = await renderSceneToDataUrl(sc);
+        const dataUrl = await renderSceneToDataUrl(sc, ext);
         if (dataUrl) {
           const link = document.createElement('a');
-          link.download = `screenshot-${String(i + 1).padStart(2, '0')}-${currentDeviceId}.png`;
+          link.download = `screenshot-${String(i + 1).padStart(2, '0')}-${currentDeviceId}.${ext}`;
           link.href = dataUrl;
           link.click();
           await new Promise(r => setTimeout(r, 350));
         }
       }
     } catch (err) {
-      console.error('Batch PNG export error:', err);
+      console.error('Batch export error:', err);
       alert('Export failed.');
     } finally {
       setActiveSceneId(originalSceneId);
       setViewMode(originalMode);
       setIsExportingZip(false);
+      setExportStatusText('');
     }
   };
+
+  const handleExportAllPngs = () => handleDownloadAll('png');
 
   // Session Backup & Restore (Full JSON Export / Import)
   const sessionFileInputRef = useRef(null);
@@ -1416,10 +1481,6 @@ export default function App() {
           return;
         }
 
-        // Restore store and device format
-        if (data.currentStore) setCurrentStore(data.currentStore);
-        if (data.currentDeviceId) setCurrentDeviceId(data.currentDeviceId);
-
         // Restore locales
         if (Array.isArray(data.locales) && data.locales.length > 0) {
           setLocales(data.locales);
@@ -1438,33 +1499,50 @@ export default function App() {
           setStoreMetadata(data.storeMetadata);
         }
 
-        // Restore text formatting
-        if (data.text) {
-          setText(prev => ({ ...prev, ...data.text }));
-        }
-
-        const restoredScenes = (data.scenes || []).map(sc => ({
-          ...sc,
-          deviceId: sc.deviceId || data.currentDeviceId || 'iphone-6-7',
-          store: sc.store || data.currentStore || STORES.APP_STORE,
-          textStyle: sc.textStyle || createInitialTextStyle()
-        }));
+        const restoredScenes = (data.scenes || []).map((sc, idx) => {
+          const baseScene = createInitialScene(sc.id || `scene-${idx + 1}`, idx + 1);
+          const devId = sc.deviceId || data.currentDeviceId || 'iphone-6-7';
+          return {
+            ...baseScene,
+            ...sc,
+            deviceId: devId,
+            store: sc.store || data.currentStore || STORES.APP_STORE,
+            headlines: { ...baseScene.headlines, ...(sc.headlines || {}) },
+            subheads: { ...baseScene.subheads, ...(sc.subheads || {}) },
+            badgeText: sc.badgeText !== undefined ? sc.badgeText : (baseScene.badgeText || ''),
+            textStyle: {
+              ...createInitialTextStyle(),
+              ...(sc.textStyle || {})
+            },
+            bgState: {
+              ...baseScene.bgState,
+              ...(sc.bgState || {})
+            },
+            devicesList: (Array.isArray(sc.devicesList) && sc.devicesList.length > 0)
+              ? sc.devicesList.map((d, dIdx) => ({
+                  ...createInitialDevice(devId),
+                  ...d,
+                  id: d.id || `device-${dIdx + 1}`
+                }))
+              : [createInitialDevice(devId)]
+          };
+        });
         setScenes(restoredScenes);
 
-        // Reset history stack on imported session
+        // Restore active scene & device
+        const targetSceneId = (data.activeSceneId && data.scenes && data.scenes.some(s => s.id === data.activeSceneId))
+          ? data.activeSceneId
+          : (data.scenes && data.scenes.length > 0 ? data.scenes[0].id : (restoredScenes[0]?.id || 'scene-1'));
+        setActiveSceneId(targetSceneId);
+
+        // Reset history stack on imported session with restored scenes
         setHistory([{
           scenes: restoredScenes,
           activeSceneId: targetSceneId
         }]);
         setHistoryIndex(0);
 
-        // Restore active scene & device
-        const targetSceneId = (data.activeSceneId && data.scenes.some(s => s.id === data.activeSceneId))
-          ? data.activeSceneId
-          : data.scenes[0].id;
-        setActiveSceneId(targetSceneId);
-
-        const targetScene = data.scenes.find(s => s.id === targetSceneId) || data.scenes[0];
+        const targetScene = (data.scenes || []).find(s => s.id === targetSceneId) || restoredScenes[0];
         const targetDeviceId = (data.activeDeviceId && targetScene?.devicesList?.some(d => d.id === data.activeDeviceId))
           ? data.activeDeviceId
           : targetScene?.devicesList?.[0]?.id || 'device-1';
@@ -1650,21 +1728,6 @@ export default function App() {
     });
   };
 
-  // Store Metadata for Simulator
-  const [storeMetadata, setStoreMetadata] = useState({
-    appName: 'App Name',
-    subtitle: { 'en-US': 'Your app subtitle or slogan', 'ar-SA': 'وصف قصير وجذاب للتطبيق' },
-    developer: 'Developer Studio',
-    category: 'Productivity',
-    rating: 4.9,
-    ratingCount: '14.2K Ratings',
-    ageRating: '4+',
-    description: {
-      'en-US': 'Supercharge your daily routine with intuitive navigation and stunning design.\n\n• High performance\n• Cloud sync\n• 100% Secure',
-      'ar-SA': 'ارتقِ بتجربتك اليومية مع تصميم أنيق وسرعة استثنائية.\n\n• أداء فائق\n• مزامنة سحابية\n• حماية تامة'
-    },
-    iconUrl: null
-  });
 
   const state = {
     currentStore,
@@ -1878,40 +1941,20 @@ export default function App() {
               />
             </div>
 
-            {/* Export Buttons */}
-            {viewMode === 'editor' && (
-              <button 
-                className={`export-btn ${isExporting ? 'exporting' : ''}`} 
-                onClick={handleExport}
-                disabled={isExporting}
-              >
-                <Download size={16} />
-                <span>{isExporting ? 'Generating...' : 'Export PNG'}</span>
-              </button>
-            )}
-
-            {viewMode === 'strip' && (
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <button 
-                  className="export-btn secondary" 
-                  onClick={handleExportAllPngs}
-                  disabled={isExportingZip}
-                >
-                  <Download size={15} />
-                  <span>Download All</span>
-                </button>
-                <button 
-                  className="export-btn" 
-                  onClick={handleExportAllZip}
-                  disabled={isExportingZip}
-                >
-                  <FolderArchive size={15} />
-                  <span>{isExportingZip ? 'Exporting...' : 'Export ZIP'}</span>
-                </button>
-              </div>
-            )}
-
-            {viewMode === 'mockup' && (
+            {/* Export Dropdown (Unified PNG, JPG, and ZIP) */}
+            {viewMode !== 'mockup' ? (
+              <ExportDropdown
+                onExportSingle={(fmt) => handleExport(fmt)}
+                onExportZip={(fmt) => handleExportAllZip(fmt)}
+                onDownloadAll={(fmt) => handleDownloadAll(fmt)}
+                isExporting={isExporting}
+                isExportingZip={isExportingZip}
+                exportStatusText={exportStatusText}
+                activeSlideIndex={activeSceneIndex >= 0 ? activeSceneIndex : 0}
+                totalSlidesCount={scenes.length}
+                align="right"
+              />
+            ) : (
               <button 
                 className="export-btn" 
                 onClick={() => setViewMode('editor')}
@@ -1927,6 +1970,8 @@ export default function App() {
           <div className="clean-preview-area">
             <div
               style={{
+                width: `${canvasWidth}px`,
+                height: `${canvasHeight}px`,
                 transform: `scale(${viewportZoom})`,
                 transformOrigin: 'center center',
                 transition: 'transform 0.15s ease-out'
@@ -1979,9 +2024,13 @@ export default function App() {
               onMoveScene={handleMoveScene}
               activeLocale={activeLocale}
               renderedPreviews={renderedPreviews}
-              onExportAllZip={handleExportAllZip}
+              onExportSingle={(fmt) => handleExport(fmt)}
+              onExportAllZip={(fmt) => handleExportAllZip(fmt)}
+              onDownloadAll={(fmt) => handleDownloadAll(fmt)}
               onExportAllPngs={handleExportAllPngs}
+              isExporting={isExporting}
               isExportingZip={isExportingZip}
+              exportStatusText={exportStatusText}
               currentDeviceConfig={currentDeviceConfig}
               canvasWidth={canvasWidth}
               canvasHeight={canvasHeight}

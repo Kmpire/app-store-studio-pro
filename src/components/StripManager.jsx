@@ -1,9 +1,10 @@
 import React from 'react';
 import { 
   Plus, Copy, Trash2, ChevronLeft, ChevronRight, 
-  Layers, FolderArchive, Download 
+  Layers 
 } from 'lucide-react';
 import SlideThumbnail from './SlideThumbnail';
+import ExportDropdown from './ExportDropdown';
 
 export default function StripManager({
   scenes = [],
@@ -14,14 +15,18 @@ export default function StripManager({
   onDeleteScene,
   onMoveScene,
   activeLocale = 'en-US',
+  onExportSingle,
   onExportAllZip,
-  onExportAllPngs,
-  isExportingZip,
+  onDownloadAll,
+  isExporting = false,
+  isExportingZip = false,
+  exportStatusText = '',
   currentDeviceConfig,
   canvasWidth = 1290,
   canvasHeight = 2796
 }) {
   const isRtl = activeLocale.startsWith('ar') || activeLocale.startsWith('he');
+  const activeIndex = scenes.findIndex(s => s.id === activeSceneId);
 
   return (
     <div className="strip-manager-container" >
@@ -33,12 +38,18 @@ export default function StripManager({
         </div>
 
         <div className="strip-top-actions">
-          <button className="btn btn-secondary btn-sm" onClick={onExportAllPngs} disabled={isExportingZip}>
-            <Download size={14} /> Download All PNGs
-          </button>
-          <button className="btn btn-primary btn-sm" onClick={onExportAllZip} disabled={isExportingZip}>
-            <FolderArchive size={14} /> {isExportingZip ? 'Exporting ZIP...' : 'Export All as ZIP'}
-          </button>
+          <ExportDropdown
+            onExportSingle={onExportSingle}
+            onExportZip={onExportAllZip}
+            onDownloadAll={onDownloadAll}
+            isExporting={isExporting}
+            isExportingZip={isExportingZip}
+            exportStatusText={exportStatusText}
+            activeSlideIndex={activeIndex >= 0 ? activeIndex : 0}
+            totalSlidesCount={scenes.length}
+            align="right"
+            btnClassName="btn btn-primary btn-sm"
+          />
           <button className="btn btn-accent btn-sm" onClick={onAddScene}>
             <Plus size={15} /> Add Slide
           </button>
